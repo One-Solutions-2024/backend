@@ -178,33 +178,28 @@ app.delete("/api/jobs/:id", async (req, res) => {
 app.post(
   "/api/jobs",
   [
-    body("title").notEmpty().withMessage("Title is required"),
-    body("description").notEmpty().withMessage("Description is required"),
-    body("apply_link").isURL().withMessage("Apply link must be a valid URL"),
-    body("image_link").isURL().withMessage("Image link must be a valid URL"),
+      body("title").notEmpty(),
+      body("description").notEmpty(),
+      body("apply_link").isURL(),
+      body("image_link").isURL(),
   ],
   async (req, res) => {
-    // Validate inputs
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
+      const errors = validationResult(req);
+      if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { title, description, apply_link, image_link } = req.body;
+      const { title, description, apply_link, image_link } = req.body;
 
-    try {
-      const addJobQuery = `
-        INSERT INTO job (title, description, apply_link, image_link)
-        VALUES (?, ?, ?, ?);
-      `;
-      await database.run(addJobQuery, [title, description, apply_link, image_link]);
-      res.status(201).json({ message: "Job added successfully" });
-    } catch (error) {
-      console.error(`Error adding job: ${error.message}`);
-      res.status(500).json({ error: "Failed to add job" });
-    }
+      try {
+          await database.run(`INSERT INTO job (title, description, apply_link, image_link) VALUES (?, ?, ?, ?)`,
+              [title, description, apply_link, image_link]);
+          res.status(201).json({ message: "Job added successfully" });
+      } catch (error) {
+          console.error("Failed to add job:", error);
+          res.status(500).json({ error: "Failed to add job" });
+      }
   }
 );
+
 
 // Root route
 app.get("/", (req, res) => {
