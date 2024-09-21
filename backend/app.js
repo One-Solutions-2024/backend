@@ -44,6 +44,12 @@ const initializeDbAndServer = async () => {
     if (jobsCount.count === 0) {
       await database.run(`
         INSERT INTO job (title, description, apply_link, image_link) VALUES 
+        ('Associate - Projects', 
+        'Possess a strong background in SAP EWM Testing, Demonstrate specialized skills in EWM, Exhibit excellent problem-solving abilities, Show proficiency in developing test plans, Have experience in defect tracking and resolution, Display strong communication skills, Be familiar with industry standards, Mentor and guide junior team members, Work Location: Hybrid', 
+        'https://cognizant.taleo.net/careersection/Lateral/jobapply.ftl?job=00060120911&lang=en&source=CWS-13082&src=CWS-13082', 
+        'https://static.toiimg.com/thumb/msid-112500237,width-1280,height-720,resizemode-4/112500237.jpg'),
+
+       
         ('Python and MERN Stack developer', 
         'Bachelor’s degree in Computer Science Information Technology or a related field., 2 - 3 LPA, Minimum of 1 year of professional experience in Python programming., Hands-on experience with the MERN stack:, MongoDB: Proficient in database design and querying., Express.js: Experience in building RESTful APIs., React.js: Skilled in developing user interfaces and managing state., Node.js: Proficient in server-side scripting., Familiarity with front-end technologies such as HTML5, CSS3, and JavaScript., Experience with version control systems, particularly Git., Work Location: In Office Delhi', 
         'https://unstop.com/competitions/1164238/register', 
@@ -64,12 +70,6 @@ const initializeDbAndServer = async () => {
         'https://careers.ey.com/ey/job/Noida-Assurance-Associate-UP-201301/1120452901/', 
         'https://bsmedia.business-standard.com/_media/bs/img/article/2024-02/12/full/1707678091-5108.jpg?im=FitAndFill=(826,465)'),
        
-
-        ('Associate - Projects', 
-        'Possess a strong background in SAP EWM Testing, Demonstrate specialized skills in EWM, Exhibit excellent problem-solving abilities, Show proficiency in developing test plans, Have experience in defect tracking and resolution, Display strong communication skills, Be familiar with industry standards, Mentor and guide junior team members, Work Location: Hybrid', 
-        'https://cognizant.taleo.net/careersection/Lateral/jobapply.ftl?job=00060120911&lang=en&source=CWS-13082&src=CWS-13082', 
-        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQSBLLLkyDaLgoJoJQMyzuwPUsTt1sW5kTaow&s'),
-
         ('QA Engineer', 
         'Bachelor’s degree or equivalent experience required, No prior experience required, Study or experience focused on one of the following or equivalent: quality engineering, quality systems, systems monitoring, computer systems management, Ability to clearly articulate ideas, such as current state and optimal state of a given system, Experience with test automation frameworks such as Selenium, Cypress, or Java tools preferred, Work Location: Bangalore', 
         'https://unstop.com/o/QYKRL4I?utm_medium=Share&utm_source=shortUrl', 
