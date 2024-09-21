@@ -62,7 +62,7 @@ const initializeDbAndServer = async () => {
          ('Assurance - Associate', 
         ' B.com Graduates, 2021-2022-2023-2024, Work Experience: 0 to 1 years., Strong interpersonal and good written & oral communication skills., Robust logical and reasoning skills , Basis knowledge on MS – Excel Ms - Office,Interest in business and commerciality.,  Work Location: Noida', 
         'https://careers.ey.com/ey/job/Noida-Assurance-Associate-UP-201301/1120452901/', 
-        'https://rmkcdn.successfactors.com/bcfdbc8a/3f2d9e7b-2820-472b-901a-c.png'),
+        'https://bsmedia.business-standard.com/_media/bs/img/article/2024-02/12/full/1707678091-5108.jpg?im=FitAndFill=(826,465)'),
        
 
         ('Associate - Projects', 
