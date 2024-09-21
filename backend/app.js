@@ -44,6 +44,27 @@ const initializeDbAndServer = async () => {
     if (jobsCount.count === 0) {
       await database.run(`
         INSERT INTO job (title, description, apply_link, image_link) VALUES 
+        ('Python and MERN Stack developer', 
+        'Bachelor’s degree in Computer Science Information Technology or a related field., 2 - 3 LPA, Minimum of 1 year of professional experience in Python programming., Hands-on experience with the MERN stack:, MongoDB: Proficient in database design and querying., Express.js: Experience in building RESTful APIs., React.js: Skilled in developing user interfaces and managing state., Node.js: Proficient in server-side scripting., Familiarity with front-end technologies such as HTML5, CSS3, and JavaScript., Experience with version control systems, particularly Git., Work Location: In Office Delhi', 
+        'https://unstop.com/competitions/1164238/register', 
+        'https://d8it4huxumps7.cloudfront.net/uploads/images/150x150/66ed1954a4079_organisation_image-UuScTTlJli1498478550WQzm7rzD0E.png?d=200x200'),
+        
+        ('Fronted Developer', 
+        'Bachelor’s degree in Computer Science Information Technology or a related field., Strong knowledge of HTML5 and CSS3 structure elements tags and attributes., Experience with media queries for responsiveness., Optimizing HTML code for search engines., Familiarity with basic JavaScript for adding interactive elements (drop-down menus, sliders, form validation)., Knowledge of JavaScript libraries like jQuery for easier DOM manipulation., Figma  to HTML design., Exp: 1 - 2 yrs,  Work Location: IAhmedabad', 
+        'https://unstop.com/competitions/1163414/register', 
+        'https://images.yourstory.com/cs/images/companies/404e7f741540-925D6B6558F2414F8714EB3C0A2C5973-1660197102039.jpg?fm=auto&ar=1:1&mode=fill&fill=solid&fill-color=fff'),
+        
+         ('Associate ', 
+        'Any graduate., 2017-2018-2019-2020-2021-2022-2023-2024., Work Experience: 0 to 1 years., Communication Skills- Excellent communication skills (written and spoken) in English language., Ability to handle and interpret large sets of data, Work Location: WFH', 
+        'https://amazonvirtualhiring.hirepro.in/registration/incta/ju0f4/apply/?j=58164&e=14190', 
+        'https://media.istockphoto.com/id/1317474419/photo/amazon.jpg?s=612x612&w=0&k=20&c=XfMWt3qTPFbhq_82ZejFTryb_v-HXRNOqxPizblgLj0='),
+        
+         ('Assurance - Associate', 
+        ' B.com Graduates, 2021-2022-2023-2024, Work Experience: 0 to 1 years., Strong interpersonal and good written & oral communication skills., Robust logical and reasoning skills , Basis knowledge on MS – Excel Ms - Office,Interest in business and commerciality.,  Work Location: Noida', 
+        'https://careers.ey.com/ey/job/Noida-Assurance-Associate-UP-201301/1120452901/', 
+        'https://rmkcdn.successfactors.com/bcfdbc8a/3f2d9e7b-2820-472b-901a-c.png'),
+       
+
         ('Associate - Projects', 
         'Possess a strong background in SAP EWM Testing, Demonstrate specialized skills in EWM, Exhibit excellent problem-solving abilities, Show proficiency in developing test plans, Have experience in defect tracking and resolution, Display strong communication skills, Be familiar with industry standards, Mentor and guide junior team members, Work Location: Hybrid', 
         'https://cognizant.taleo.net/careersection/Lateral/jobapply.ftl?job=00060120911&lang=en&source=CWS-13082&src=CWS-13082', 
