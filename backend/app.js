@@ -139,6 +139,40 @@ app.get("/api/jobs", async (req, res) => {
   }
 });
 
+// Route to update a job
+app.put("/api/jobs/:id", async (req, res) => {
+  const { id } = req.params;
+  const { title, description, apply_link, image_link } = req.body;
+
+  try {
+    const updateJobQuery = `
+      UPDATE job
+      SET title = ?, description = ?, apply_link = ?, image_link = ?
+      WHERE id = ?;
+    `;
+    await database.run(updateJobQuery, [title, description, apply_link, image_link, id]);
+    res.json({ message: "Job updated successfully" });
+  } catch (error) {
+    console.error(`Error updating job: ${error.message}`);
+    res.status(500).json({ error: "Failed to update job" });
+  }
+});
+
+// Route to delete a job
+app.delete("/api/jobs/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const deleteJobQuery = `DELETE FROM job WHERE id = ?;`;
+    await database.run(deleteJobQuery, id);
+    res.json({ message: "Job deleted successfully" });
+  } catch (error) {
+    console.error(`Error deleting job: ${error.message}`);
+    res.status(500).json({ error: "Failed to delete job" });
+  }
+});
+
+
 
 // Route to add a new job (including image_link)
 app.post(
