@@ -211,7 +211,7 @@ app.put("/api/jobs/:id", async (req, res) => {
 });
 
 // Route to delete a job
-app.delete("/api/jobs/companyname", async (req, res) => {
+app.delete("/api/jobs/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -252,6 +252,27 @@ app.post(
       }
   }
 );
+
+// Route to get job by company name
+app.get("/api/jobs/company/:companyname", async (req, res) => {
+  const { companyname } = req.params;
+
+  try {
+    const getJobByCompanyNameQuery = `
+      SELECT * FROM job WHERE companyname = ?;
+    `;
+    const job = await database.get(getJobByCompanyNameQuery, [companyname]);
+
+    if (job) {
+      res.json(job);
+    } else {
+      res.status(404).json({ error: "Job not found" });
+    }
+  } catch (error) {
+    console.error(`Error fetching job by company name: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve job" });
+  }
+});
 
 
 // Root route
