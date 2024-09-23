@@ -175,7 +175,7 @@ app.get("/api/jobs", async (req, res) => {
   const { page = 1, limit = 10 } = req.query; // Pagination query params
 
   try {
-    const offset = (page - 1) * limit;
+    const offset = (page - 1) * parseInt(limit);
     const getAllJobsQuery = `
       SELECT * FROM job LIMIT ${limit} OFFSET ${offset};
     `;
@@ -240,7 +240,7 @@ app.post(
       const errors = validationResult(req);
       if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-      const { title, description, apply_link, image_link } = req.body;
+      const { companyname, title, description, apply_link, image_link } = req.body;
 
       try {
           await database.run(`INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES (?, ?, ?, ?, ?)`,
