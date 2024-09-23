@@ -32,6 +32,7 @@ const initializeDbAndServer = async () => {
     await database.run(`
       CREATE TABLE IF NOT EXISTS job (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        companyname TEXT NOT NULL,
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         apply_link TEXT NOT NULL,
@@ -43,7 +44,7 @@ const initializeDbAndServer = async () => {
     const jobsCount = await database.get(`SELECT COUNT(*) as count FROM job;`);
     if (jobsCount.count === 0) {
       await database.run(`
-        INSERT INTO job (title, description, apply_link, image_link) VALUES 
+        INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES 
         ('Technical Associate', 
         'BE/ BTech/ MCA, 2018/ 2019/ 2020/ 2021/ 2022/ 2023/ 2024, Experience with writing clean code in Java, Excellent oral and written communication skills  , Strong knowledge of technology security controls (Authentication, Authorization and Encryption of data, Single Sign On, Data retention/deletion etc.), Understanding of PII data and applicable controls to safeguard it., Good analytical skills , Proficient in PowerPoint and Excel', 
         'https://genpact.taleo.net/careersection/sgy_external_career_section/jobdetail.ftl?job=ITO083797', 
@@ -175,15 +176,15 @@ app.get("/api/jobs", async (req, res) => {
 // Route to update a job
 app.put("/api/jobs/:id", async (req, res) => {
   const { id } = req.params;
-  const { title, description, apply_link, image_link } = req.body;
+  const {companyname, title, description, apply_link, image_link } = req.body;
 
   try {
     const updateJobQuery = `
       UPDATE job
-      SET title = ?, description = ?, apply_link = ?, image_link = ?
+      SET companyname = ?, title = ?, description = ?, apply_link = ?, image_link = ?
       WHERE id = ?;
     `;
-    await database.run(updateJobQuery, [title, description, apply_link, image_link, id]);
+    await database.run(updateJobQuery, [companyname, title, description, apply_link, image_link, id]);
     res.json({ message: "Job updated successfully" });
   } catch (error) {
     console.error(`Error updating job: ${error.message}`);
@@ -192,7 +193,7 @@ app.put("/api/jobs/:id", async (req, res) => {
 });
 
 // Route to delete a job
-app.delete("/api/jobs/:id", async (req, res) => {
+app.delete("/api/jobs/companyname", async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -211,6 +212,7 @@ app.delete("/api/jobs/:id", async (req, res) => {
 app.post(
   "/api/jobs",
   [
+      body("companyname").notEmpty(),
       body("title").notEmpty(),
       body("description").notEmpty(),
       body("apply_link").isURL(),
@@ -223,8 +225,8 @@ app.post(
       const { title, description, apply_link, image_link } = req.body;
 
       try {
-          await database.run(`INSERT INTO job (title, description, apply_link, image_link) VALUES (?, ?, ?, ?)`,
-              [title, description, apply_link, image_link]);
+          await database.run(`INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES (?, ?, ?, ?, ?)`,
+              [companyname, title, description, apply_link, image_link]);
           res.status(201).json({ message: "Job added successfully" });
       } catch (error) {
           console.error("Failed to add job:", error);
