@@ -172,7 +172,7 @@ initializeDbAndServer();
 
 // Route to get all jobs
 app.get("/api/jobs", async (req, res) => {
-  const { page = 1, limit = length.job } = req.query; // Pagination query params
+  const { page = 1, limit = 10 } = req.query; // Pagination query params
 
   try {
     const offset = (page - 1) * limit;
