@@ -55,7 +55,7 @@ const initializeDbAndServer = async () => {
         'Data Automation Analyst', 
         'Bachelor of Engineering required. MBA is a plus., 0-3 years of experience with scripts, data warehousing, and / or automation,  Hands-on experience (or proficiency with SQL and Python), Proficiency in data mining, mathematics, and statistical analysis, Keen attention to detail to ensure accuracy in data processing, analysis, and reporting , Strong analytical and problem-solving skills,Good communication and interpersonal skills.,Ability to work effectively within a team and collaborate with cross-functional departments,Experience in data reporting and proficiency in SQL are advantageous for querying and managing relational databases.,Location:Bangalore', 
         'https://app.joinsuperset.com/join/#/signup/student/jobprofiles/6e4f8e33-c0a0-4348-83af-66cd8aa8ff9e', 
-        'https://www.hirist.tech/j/simplotel-technologies-data-automation-analyst-etlpython-1379836.html?ref=recom_ev_ml'),
+        'https://ratetiger.com/wp-content/uploads/2021/07/simplotel-PR.jpg'),
 
         ('Genpact',
         'Technical Associate', 
