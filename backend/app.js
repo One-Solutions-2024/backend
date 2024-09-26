@@ -45,18 +45,25 @@ const initializeDbAndServer = async () => {
     if (jobsCount.count === 0) {
       await database.run(`
         INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES 
+         ('Capgemini',
+        'Software Engineer', 
+        'BE/BTech/ ME/MTech / MCA & MSC, Freshers 2023 & 2024, Communication: You should possess strong communication skills for effective interactions with project partners., Collaboration: You should demonstrate good interpersonal and collaboration skills, Flexibility: You should be willing to skill-up in multiple technologies and work in any Capgemini city location and travel as required., Initiative: You should be able to work independently, take initiative and manage a variety of activities concurrently.,Other Skills: Good analytical and problem-solving skill.,Location: Mumbai, Pune, Bangalore', 
+        'https://app.joinsuperset.com/join/#/signup/student/jobprofiles/6e4f8e33-c0a0-4348-83af-66cd8aa8ff9e', 
+        'https://sightsinplus.com/wp-content/uploads/2022/08/Capgemini-India-is-hiring-across-the-country-check-details-here.jpg'),
+
+         ('Simplotel Technologies',
+        'Data Automation Analyst', 
+        'Bachelor of Engineering required. MBA is a plus., 0-3 years of experience with scripts, data warehousing, and / or automation,  Hands-on experience (or proficiency with SQL and Python), Proficiency in data mining, mathematics, and statistical analysis, Keen attention to detail to ensure accuracy in data processing, analysis, and reporting , Strong analytical and problem-solving skills,Good communication and interpersonal skills.,Ability to work effectively within a team and collaborate with cross-functional departments,Experience in data reporting and proficiency in SQL are advantageous for querying and managing relational databases.,Location:Bangalore', 
+        'https://app.joinsuperset.com/join/#/signup/student/jobprofiles/6e4f8e33-c0a0-4348-83af-66cd8aa8ff9e', 
+        'https://sightsinplus.com/wp-content/uploads/2022/08/Capgemini-India-is-hiring-across-the-country-check-details-here.jpg'),
+
         ('Genpact',
         'Technical Associate', 
         'BE/ BTech/ MCA, 2018/ 2019/ 2020/ 2021/ 2022/ 2023/ 2024, Experience with writing clean code in Java, Excellent oral and written communication skills  , Strong knowledge of technology security controls (Authentication, Authorization and Encryption of data, Single Sign On, Data retention/deletion etc.), Understanding of PII data and applicable controls to safeguard it., Good analytical skills , Proficient in PowerPoint and Excel', 
         'https://genpact.taleo.net/careersection/sgy_external_career_section/jobdetail.ftl?job=ITO083797', 
         'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTbaYaam0-ve4j-3cnccZ7akzMNwmGoF2e8NA&s'),
 
-         ('Capgemini',
-        'Data Engineer', 
-        'BTech/ MTech, Freshers(0-2yrs), Expert knowledge in Python, Proficiency in working with databases, both relational and non-relational like MySQL with experience in designing database schemas, Strong knowledge in areas like Object Oriented Analysis and Design, Multi-threading, Multi process handling and Memory management., Good knowledge model evaluation metrics and techniques., Experience in deploying machine learning models to production environments., Currently working in an Agile scrum team and proficient in using version control systems (e.g., Git) for collaborative development.', 
-        'https://www.capgemini.com/jobs/_0RIdpEBh-uN-C4I_LBa/47204-en_US/', 
-        'https://sightsinplus.com/wp-content/uploads/2022/08/Capgemini-India-is-hiring-across-the-country-check-details-here.jpg'),
-
+        
          ('Zebra',
         'SOFTWARE ENGINEER', 
         'BTech/ MTech, Freshers(0-2yrs), Establishes requirements for less complex design projects, Works on Completing all phases of Software engineering design projects, Works on analysis of processes and delivers results to necessary stakeholder, Strong Works with latest technologies and new approaches, Multi-threading, Multi process handling and Memory management., Work Location : Pune.', 
