@@ -66,8 +66,8 @@ const initializeDbAndServer = async () => {
         ('COGNIZANT',
         'COGNIZANT IS MASS HIRING : ENGINEER TRAINEE.', 
         'Degree in B.E/B.Tech of any branch (UG full time degree).,2024 batch can apply., At the time of registration, consistent academic record of a minimum of 50% in X, XII, Diploma, UG & PG with no standing arrears in current education., At the time of joining, all recruits need to have a minimum 50% aggregate in the pursuing degree with no standing arrears., Compensation – INR 4,00,000 per annum., Night shift allowance will be paid by the project.,Work Location : Bengaluru, Chennai, Coimbatore.',
-        'https://careers-wipro.icims.com/jobs/3111385/login?_jsqid=fea9dbfe-9b0b-4ccb-b99e-4c6c740e03a4&_sp=8f66a2e6-1c42-41c2-876f-ffc42f934bf9.1728280001877&_ga=2.10040498.649037331.1728279572-2118722387.1725185858&_gl=1*ag753p*_ga*MjExODcyMjM4Ny4xNzI1MTg1ODU4*_ga_5Y2BYGL910*MTcyODI3OTU3Mi4zLjEuMTcyODI3OTk4OS4zMy4wLjA.&mobile=false&width=1150&height=500&bga=true&needsRedirect=false&jan1offset=330&jun1offset=330',      
-        'https://app.joinsuperset.com/join/#/signup/student/jobprofiles/b643e525-c83b-4505-9a10-a666be44f249'),        
+        'https://app.joinsuperset.com/join/#/signup/student/jobprofiles/b643e525-c83b-4505-9a10-a666be44f249',        
+        'https://static.toiimg.com/thumb/msid-112500237,width-1280,height-720,resizemode-4/112500237.jpg'),
         
         ('Capgemini',
         'Software Engineer', 
