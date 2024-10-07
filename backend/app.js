@@ -45,7 +45,32 @@ const initializeDbAndServer = async () => {
     if (jobsCount.count === 0) {
       await database.run(`
         INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES 
-         ('Capgemini',
+        ('Mitsogo',
+        'Product Support Engineer', 
+        'B.E/B.Tech , 2024 and 2023 passed out, Flexible to work in shifts, including a willingness to work on a 24/5 rotational basis., Strong analytical and problem-solving skills., Excellent communication skills and a passion for customer service.,Basic knowledge of multiple platforms (Windows, Mac, iOS, Android) is a plus, Location: Chennai (Work from Office)', 
+        'https://forms.office.com/pages/responsepage.aspx?id=KqbnxBjPTUqTeDaRUh_kTkpZb4Wf4idCqyoir4p7sZ5UQlFTR0tEM1dCRVRKSjdYVE5YV0pMWkRJUy4u&route=shorturl',
+        'https://media.glassdoor.com/l/fb/32/a8/54/mitsogo-reception-wall.jpg'),
+
+        ('Stripe',
+        'Software Engineer, Intern', 
+        'Bachelors/Masters degree/PhD 2025 | 2026,At least 2 years of university education, or equivalent work experience, Some experience and familiarity with programming, either through side projects or classwork. We work mostly in Java, Ruby, JavaScript, Scala, and Go. We believe new programming languages can be learned if the fundamentals and general knowledge are present, Experience from previous internships or other multi-person projects, including open source contributions, that demonstrate evaluating and receiving feedback from mentors, peers, and stakeholders, Familiarity with navigating and managing your work in new code bases, with multiple languages, Location: Bengaluru', 
+        'https://stripe.com/jobs/listing/software-engineer-intern/6109583/apply?gh_src=73vnei',
+        'https://th.bing.com/th/id/OIP.xJ9kBm4ui7x7ZdRQLy8yrAHaE8?pid=ImgDet&w=474&h=316&rs=1'),
+
+        ('Wipro',
+        'Trainee Manual Testing.', 
+        'B.Tech / BE (CS, IT and ECE) / MCA only. 2024 pass out only.,Excellent communication skills (Oral, written and listening ability)., Knowledge of Software Development Life Cycle (SDLC) principles/concepts., Principles of automation testing and some exposure might be desirable., Knowledge of system testing and software quality assurance best practices and methodologies., Ability to break down a complex problem into smaller, more manageable pieces and able to understand and describe the relationships between those pieces (i.e. good analytical skills)., Apply basic relational database concepts (e.g. table relationships, keys, SQL and DB2 queries etc)., Experience with systems implementations, Writes intermediate SQL queries, Troubleshoots intermediate system defects and errors, Effectively manage tasks, prioritizes and proactively update status to Managers., Should be able to tie test plans to real time customer impact, Good Understanding of Data Analysis, Analyzes and debug issues, Utilizes relevant problem-solving resources as needed, Location: Bengaluru', 
+        'https://careers-wipro.icims.com/jobs/3111385/login?_jsqid=fea9dbfe-9b0b-4ccb-b99e-4c6c740e03a4&_sp=8f66a2e6-1c42-41c2-876f-ffc42f934bf9.1728280001877&_ga=2.10040498.649037331.1728279572-2118722387.1725185858&_gl=1*ag753p*_ga*MjExODcyMjM4Ny4xNzI1MTg1ODU4*_ga_5Y2BYGL910*MTcyODI3OTU3Mi4zLjEuMTcyODI3OTk4OS4zMy4wLjA.&mobile=false&width=1150&height=500&bga=true&needsRedirect=false&jan1offset=330&jun1offset=330',      
+        'https://bl-i.thgim.com/public/incoming/y22soj/article66785980.ece/alternates/LANDSCAPE_1200/IMG_BL24_States_wipro_2_1_K9ATO970.jpg'),
+        
+        ('COGNIZANT',
+        'COGNIZANT IS MASS HIRING : ENGINEER TRAINEE.', 
+        'Degree in B.E/B.Tech of any branch (UG full time degree).,2024 batch can apply., At the time of registration, consistent academic record of a minimum of 50% in X, XII, Diploma, UG & PG with no standing arrears in current education., At the time of joining, all recruits need to have a minimum 50% aggregate in the pursuing degree with no standing arrears., Compensation – INR 4,00,000 per annum., Night shift allowance will be paid by the project.,Work Location : Bengaluru, Chennai, Coimbatore.',
+        'https://careers-wipro.icims.com/jobs/3111385/login?_jsqid=fea9dbfe-9b0b-4ccb-b99e-4c6c740e03a4&_sp=8f66a2e6-1c42-41c2-876f-ffc42f934bf9.1728280001877&_ga=2.10040498.649037331.1728279572-2118722387.1725185858&_gl=1*ag753p*_ga*MjExODcyMjM4Ny4xNzI1MTg1ODU4*_ga_5Y2BYGL910*MTcyODI3OTU3Mi4zLjEuMTcyODI3OTk4OS4zMy4wLjA.&mobile=false&width=1150&height=500&bga=true&needsRedirect=false&jan1offset=330&jun1offset=330',      
+        'https://static.toiimg.com/thumb/msid-112500237,width-1280,height-720,resizemode-4/112500237.jpg'),
+        
+        
+        ('Capgemini',
         'Software Engineer', 
         'BE/BTech/ ME/MTech / MCA & MSC, Freshers 2023 & 2024, Communication: You should possess strong communication skills for effective interactions with project partners., Collaboration: You should demonstrate good interpersonal and collaboration skills, Flexibility: You should be willing to skill-up in multiple technologies and work in any Capgemini city location and travel as required., Initiative: You should be able to work independently, take initiative and manage a variety of activities concurrently.,Other Skills: Good analytical and problem-solving skill.,Location: Mumbai, Pune, Bangalore', 
         'https://app.joinsuperset.com/join/#/signup/student/jobprofiles/6e4f8e33-c0a0-4348-83af-66cd8aa8ff9e', 
@@ -201,7 +226,7 @@ app.get("/api/jobs", async (req, res) => {
 // Route to update a job
 app.put("/api/jobs/:id", async (req, res) => {
   const { id } = req.params;
-  const {companyname, title, description, apply_link, image_link } = req.body;
+  const { companyname, title, description, apply_link, image_link } = req.body;
 
   try {
     const updateJobQuery = `
@@ -237,26 +262,26 @@ app.delete("/api/jobs/:id", async (req, res) => {
 app.post(
   "/api/jobs",
   [
-      body("companyname").notEmpty(),
-      body("title").notEmpty(),
-      body("description").notEmpty(),
-      body("apply_link").isURL(),
-      body("image_link").isURL(),
+    body("companyname").notEmpty(),
+    body("title").notEmpty(),
+    body("description").notEmpty(),
+    body("apply_link").isURL(),
+    body("image_link").isURL(),
   ],
   async (req, res) => {
-      const errors = validationResult(req);
-      if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-      const { companyname, title, description, apply_link, image_link } = req.body;
+    const { companyname, title, description, apply_link, image_link } = req.body;
 
-      try {
-          await database.run(`INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES (?, ?, ?, ?, ?)`,
-              [companyname, title, description, apply_link, image_link]);
-          res.status(201).json({ message: "Job added successfully" });
-      } catch (error) {
-          console.error("Failed to add job:", error);
-          res.status(500).json({ error: "Failed to add job" });
-      }
+    try {
+      await database.run(`INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES (?, ?, ?, ?, ?)`,
+        [companyname, title, description, apply_link, image_link]);
+      res.status(201).json({ message: "Job added successfully" });
+    } catch (error) {
+      console.error("Failed to add job:", error);
+      res.status(500).json({ error: "Failed to add job" });
+    }
   }
 );
 
