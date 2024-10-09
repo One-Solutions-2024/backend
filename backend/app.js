@@ -224,125 +224,123 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Something went wrong!' });
 });
-
-// Route to get all jobs with pagination
-app.get('/api/jobs', asyncHandler(async (req, res) => {
+// Route to get all jobs
+app.get("/api/jobs", async (req, res) => {
   const { page = 1, limit = 9 } = req.query; // Pagination query params
-  const offset = (page - 1) * parseInt(limit);
 
-  const getAllJobsQuery = 'SELECT * FROM job LIMIT ? OFFSET ?';
-  const countQuery = 'SELECT COUNT(*) AS total FROM job';
-
-  const jobs = await database.all(getAllJobsQuery, [limit, offset]);
-  const totalJobs = await database.get(countQuery);
-
-  if (jobs.length > 0) {
-    res.json({
-      jobs,
-      total: totalJobs.total,
-      currentPage: parseInt(page),
-      totalPages: Math.ceil(totalJobs.total / limit),
-    });
-  } else {
-    res.status(404).json({ error: 'No jobs found' });
+  try {
+    const offset = (page - 1) * parseInt(limit);
+    const getAllJobsQuery = `
+      SELECT * FROM job LIMIT ${limit} OFFSET ${offset};
+    `;
+    const jobs = await database.all(getAllJobsQuery);
+    if (jobs.length > 0) {
+      res.json(jobs);
+    } else {
+      res.status(404).json({ error: "No jobs found" });
+    }
+  } catch (error) {
+    console.error(`Error fetching all jobs: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve jobs" });
   }
-}));
+});
 
-// Route to get job by company name
-app.get('/api/jobs/company/:companyname', asyncHandler(async (req, res) => {
-  const { companyname } = req.params;
-  const getJobByCompanyNameQuery = 'SELECT * FROM job WHERE companyname = ?';
+// Route to update a job
+app.put("/api/jobs/:id", async (req, res) => {
+  const { id } = req.params;
+  const { companyname, title, description, apply_link, image_link } = req.body;
 
-  const job = await database.get(getJobByCompanyNameQuery, [companyname]);
-  if (job) {
-    res.json(job);
-  } else {
-    res.status(404).json({ error: 'Job not found' });
+  try {
+    const updateJobQuery = `
+      UPDATE job
+      SET companyname = ?, title = ?, description = ?, apply_link = ?, image_link = ?
+      WHERE id = ?;
+    `;
+    await database.run(updateJobQuery, [companyname, title, description, apply_link, image_link, id]);
+    res.json({ message: "Job updated successfully" });
+  } catch (error) {
+    console.error(`Error updating job: ${error.message}`);
+    res.status(500).json({ error: "Failed to update job" });
   }
-}));
+});
 
-// Route to get a job by ID with Redis caching
-app.get('/api/jobs/:id', asyncHandler(async (req, res) => {
+// Route to delete a job
+app.delete("/api/jobs/:id", async (req, res) => {
   const { id } = req.params;
 
-  client.get(id, async (err, cachedJob) => {
-    if (cachedJob) {
-      return res.json(JSON.parse(cachedJob)); // Return cached job
-    }
+  try {
+    const deleteJobQuery = `DELETE FROM job WHERE id = ?;`;
+    await database.run(deleteJobQuery, id);
+    res.json({ message: "Job deleted successfully" });
+  } catch (error) {
+    console.error(`Error deleting job: ${error.message}`);
+    res.status(500).json({ error: "Failed to delete job" });
+  }
+});
 
-    const getJobByIdQuery = 'SELECT * FROM job WHERE id = ?';
-    const job = await database.get(getJobByIdQuery, [id]);
 
-    if (job) {
-      client.set(id, JSON.stringify(job)); // Cache the result
-      res.json(job);
-    } else {
-      res.status(404).json({ error: 'Job not found' });
-    }
-  });
-}));
 
-// Route to add a new job with validation
+// Route to add a new job (including image_link)
 app.post(
-  '/api/jobs',
+  "/api/jobs",
   [
-    body('companyname').notEmpty(),
-    body('title').notEmpty(),
-    body('description').notEmpty(),
-    body('apply_link').isURL(),
-    body('image_link').isURL(),
+    body("companyname").notEmpty(),
+    body("title").notEmpty(),
+    body("description").notEmpty(),
+    body("apply_link").isURL(),
+    body("image_link").isURL(),
   ],
-  asyncHandler(async (req, res) => {
+  async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
     const { companyname, title, description, apply_link, image_link } = req.body;
-    const addJobQuery = `INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES (?, ?, ?, ?, ?)`;
 
-    await database.run(addJobQuery, [companyname, title, description, apply_link, image_link]);
-    res.status(201).json({ message: 'Job added successfully' });
-  })
+    try {
+      await database.run(`INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES (?, ?, ?, ?, ?)`,
+        [companyname, title, description, apply_link, image_link]);
+      res.status(201).json({ message: "Job added successfully" });
+    } catch (error) {
+      console.error("Failed to add job:", error);
+      res.status(500).json({ error: "Failed to add job" });
+    }
+  }
 );
 
-// Route to update a job
-app.put('/api/jobs/:id', asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const { companyname, title, description, apply_link, image_link } = req.body;
+// Route to get job by company name
+app.get("/api/jobs/company/:companyname", async (req, res) => {
+  const { companyname } = req.params;
 
-  if (!companyname || !title || !description || !apply_link || !image_link) {
-    return res.status(400).json({ error: 'Missing required fields' });
+  try {
+    const getJobByCompanyNameQuery = `
+      SELECT * FROM job WHERE companyname = ?;
+    `;
+    const job = await database.get(getJobByCompanyNameQuery, [companyname]);
+
+    if (job) {
+      res.json(job);
+    } else {
+      res.status(404).json({ error: "Job not found" });
+    }
+  } catch (error) {
+    console.error(`Error fetching job by company name: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve job" });
   }
+});
 
-  const updateJobQuery = `UPDATE job SET companyname = ?, title = ?, description = ?, apply_link = ?, image_link = ? WHERE id = ?`;
-  await database.run(updateJobQuery, [companyname, title, description, apply_link, image_link, id]);
-
-  res.json({ message: 'Job updated successfully' });
-}));
-
-// Route to delete a job
-app.delete('/api/jobs/:id', asyncHandler(async (req, res) => {
-  const { id } = req.params;
-  const deleteJobQuery = 'DELETE FROM job WHERE id = ?';
-
-  await database.run(deleteJobQuery, id);
-  res.json({ message: 'Job deleted successfully' });
-}));
-
-// Route to track visitors excluding a specific IP
 app.get('/track-visitor', (req, res) => {
   const visitorIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  const myIp = process.env.IP_ADDRESS; // Add your IP address to exclude
+  const myIp = process.env.Ip-Address; // Add your IP address to exclude
 
-  // Use Redis or database to store visitor IPs
-  client.sadd('visitors', visitorIp, (err, reply) => {
-    client.scard('visitors', (err, visitorCount) => {
-      res.json({ visitorCount });
-    });
-  });
+  if (visitorIp !== myIp) {
+    visitors.add(visitorIp); // Add visitor IP if not your IP
+  }
+
+  res.json({ visitorCount: visitors.size });
 });
+
 
 // Root route
-app.get('/', (req, res) => {
-  res.send('Welcome to the Job Card Details API!');
+app.get("/", (req, res) => {
+  res.send("Welcome to the Job Card Details API!");
 });
-
