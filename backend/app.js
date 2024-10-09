@@ -6,6 +6,7 @@ const cors = require("cors");
 const helmet = require("helmet");
 const { body, validationResult } = require("express-validator");
 require("dotenv").config(); // Load environment variables
+const visitors = new Set(); // Store unique visitors by IP
 const PORT = process.env.PORT || 3000;
 
 
@@ -303,6 +304,17 @@ app.get("/api/jobs/company/:companyname", async (req, res) => {
     console.error(`Error fetching job by company name: ${error.message}`);
     res.status(500).json({ error: "Failed to retrieve job" });
   }
+});
+
+app.get('/track-visitor', (req, res) => {
+  const visitorIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+  const myIp = process.env.Ip-Address; // Add your IP address to exclude
+
+  if (visitorIp !== myIp) {
+    visitors.add(visitorIp); // Add visitor IP if not your IP
+  }
+
+  res.json({ visitorCount: visitors.size });
 });
 
 
