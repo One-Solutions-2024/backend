@@ -330,7 +330,7 @@ app.get("/api/jobs/company/:companyname", async (req, res) => {
 
 app.get('/track-visitor', (req, res) => {
   const visitorIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  const myIp = process.env.Ip-Address; // Add your IP address to exclude
+  const myIp = "152.58.197.241"; // Add your IP address to exclude
 
   if (visitorIp !== myIp) {
     visitors.add(visitorIp); // Add visitor IP if not your IP
