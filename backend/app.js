@@ -10,6 +10,8 @@ const visitors = new Set(); // Store unique visitors by IP
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const redis = require('redis');
+const myIp = "152.58.197.241"; // Your IP address to exclude
+
 
 const PORT = process.env.PORT || 3000;
 
@@ -330,13 +332,13 @@ app.get("/api/jobs/company/:companyname", async (req, res) => {
 
 app.get('/track-visitor', (req, res) => {
   const visitorIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-  const myIp = "152.58.197.241"; // Add your IP address to exclude
 
-  if (visitorIp !== myIp) {
-    visitors.add(visitorIp); // Add visitor IP if not your IP
+  // Exclude your IP address from being counted
+  if (visitorIp !== myIp && !visitors.has(visitorIp)) {
+    visitors.add(visitorIp); // Add unique visitor IP to the set
   }
 
-  res.json({ visitorCount: visitors.size });
+  res.json({ visitorCount: visitors.size }); // Send the unique visitor count
 });
 
 
