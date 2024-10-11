@@ -6,11 +6,9 @@ const cors = require("cors");
 const helmet = require("helmet");
 const { body, validationResult } = require("express-validator");
 require("dotenv").config(); // Load environment variables
-const visitors = new Set(); // Store unique visitors by IP
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
-const redis = require('redis');
-const myIp = "152.58.197.241"; // Your IP address to exclude
+const mongoose = require("mongoose"); // For MongoDB
 
 
 const PORT = process.env.PORT || 3000;
@@ -26,8 +24,7 @@ app.use(cors());
 app.use(helmet()); // Basic security headers
 app.use(morgan('combined')); // Logging
 
-// Redis client for caching
-const client = redis.createClient();
+
 
 let database = null;
 
@@ -226,16 +223,23 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Something went wrong!' });
 });
-// Route to get all jobs
+/// MongoDB model for visitor tracking (example)
+const PageviewSchema = new mongoose.Schema({
+  ip: String,
+  views: { type: Number, default: 1 },
+});
+
+const Pageview = mongoose.model("Pageview", PageviewSchema);
+
+// Route to get all jobs with pagination
 app.get("/api/jobs", async (req, res) => {
   const { page = 1, limit = 8 } = req.query; // Pagination query params
 
   try {
     const offset = (page - 1) * parseInt(limit);
-    const getAllJobsQuery = `
-      SELECT * FROM job LIMIT ${limit} OFFSET ${offset};
-    `;
-    const jobs = await database.all(getAllJobsQuery);
+    const getAllJobsQuery = `SELECT * FROM job LIMIT ? OFFSET ?;`;
+    const jobs = await database.all(getAllJobsQuery, [limit, offset]); // Parameterized query
+
     if (jobs.length > 0) {
       res.json(jobs);
     } else {
@@ -253,6 +257,12 @@ app.put("/api/jobs/:id", async (req, res) => {
   const { companyname, title, description, apply_link, image_link } = req.body;
 
   try {
+    // Check if the job exists
+    const existingJob = await database.get("SELECT * FROM job WHERE id = ?", [id]);
+    if (!existingJob) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
     const updateJobQuery = `
       UPDATE job
       SET companyname = ?, title = ?, description = ?, apply_link = ?, image_link = ?
@@ -271,8 +281,14 @@ app.delete("/api/jobs/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
+    // Check if the job exists
+    const existingJob = await database.get("SELECT * FROM job WHERE id = ?", [id]);
+    if (!existingJob) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
     const deleteJobQuery = `DELETE FROM job WHERE id = ?;`;
-    await database.run(deleteJobQuery, id);
+    await database.run(deleteJobQuery, [id]);
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
     console.error(`Error deleting job: ${error.message}`);
@@ -280,9 +296,7 @@ app.delete("/api/jobs/:id", async (req, res) => {
   }
 });
 
-
-
-// Route to add a new job (including image_link)
+// Route to add a new job (with validation)
 app.post(
   "/api/jobs",
   [
@@ -299,8 +313,11 @@ app.post(
     const { companyname, title, description, apply_link, image_link } = req.body;
 
     try {
-      await database.run(`INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES (?, ?, ?, ?, ?)`,
-        [companyname, title, description, apply_link, image_link]);
+      const insertJobQuery = `
+        INSERT INTO job (companyname, title, description, apply_link, image_link)
+        VALUES (?, ?, ?, ?, ?);
+      `;
+      await database.run(insertJobQuery, [companyname, title, description, apply_link, image_link]);
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error("Failed to add job:", error);
@@ -314,9 +331,7 @@ app.get("/api/jobs/company/:companyname", async (req, res) => {
   const { companyname } = req.params;
 
   try {
-    const getJobByCompanyNameQuery = `
-      SELECT * FROM job WHERE companyname = ?;
-    `;
+    const getJobByCompanyNameQuery = `SELECT * FROM job WHERE companyname = ?;`;
     const job = await database.get(getJobByCompanyNameQuery, [companyname]);
 
     if (job) {
@@ -330,47 +345,36 @@ app.get("/api/jobs/company/:companyname", async (req, res) => {
   }
 });
 
-app.get('/track-visitor', async (req, res) => {
-  const visitorIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-
-  // Check if this IP has been tracked before
-  let visitor = await Pageview.findOne({ ip: visitorIp });
-
-  if (!visitor) {
-    // First time this IP is visiting, create a new record
-    visitor = new Pageview({ ip: visitorIp, views: 1 });
-    await visitor.save();
-  } else {
-    // IP has visited before, increment view count (optional)
-    visitor.views += 1;
-    await visitor.save();
-  }
-
-  const uniqueViewsCount = await Pageview.countDocuments(); // Total unique visitors
-  res.json({ uniqueViews: uniqueViewsCount });
-});
-
-// Route to render job details page
-app.get("/details/:companyname", async (req, res) => {
-  const { companyname } = req.params;
+// Route to track visitor IPs and views
+app.get("/track-visitor", async (req, res) => {
+  const visitorIp = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
 
   try {
-    const getJobByCompanyNameQuery = `SELECT * FROM job WHERE companyname = ?;`;
-    const job = await database.get(getJobByCompanyNameQuery, [companyname]);
+    let visitor = await Pageview.findOne({ ip: visitorIp });
 
-    if (job) {
-      res.render("jobDetails", { job }); // Render a template with the job data
+    if (!visitor) {
+      visitor = new Pageview({ ip: visitorIp, views: 1 });
+      await visitor.save();
     } else {
-      res.status(404).send("Job not found");
+      visitor.views += 1;
+      await visitor.save();
     }
+
+    const uniqueViewsCount = await Pageview.countDocuments();
+    res.json({ uniqueViews: uniqueViewsCount });
   } catch (error) {
-    console.error(`Error fetching job by company name: ${error.message}`);
-    res.status(500).send("Failed to retrieve job details");
+    console.error("Error tracking visitor:", error);
+    res.status(500).json({ error: "Failed to track visitor" });
   }
 });
-
 
 // Root route
 app.get("/", (req, res) => {
   res.send("Welcome to the Job Card Details API!");
 });
+
+// MongoDB connection (example)
+mongoose
+  .connect("mongodb://localhost:27017/yourdbname", { useNewUrlParser: true, useUnifiedTopology: true })
+  .then(() => console.log("MongoDB connected"))
+  .catch((err) => console.error("MongoDB connection error:", err));
