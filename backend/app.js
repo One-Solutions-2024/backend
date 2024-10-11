@@ -350,6 +350,24 @@ app.get('/track-visitor', async (req, res) => {
   res.json({ uniqueViews: uniqueViewsCount });
 });
 
+// Route to render job details page
+app.get("/details/:companyname", async (req, res) => {
+  const { companyname } = req.params;
+
+  try {
+    const getJobByCompanyNameQuery = `SELECT * FROM job WHERE companyname = ?;`;
+    const job = await database.get(getJobByCompanyNameQuery, [companyname]);
+
+    if (job) {
+      res.render("jobDetails", { job }); // Render a template with the job data
+    } else {
+      res.status(404).send("Job not found");
+    }
+  } catch (error) {
+    console.error(`Error fetching job by company name: ${error.message}`);
+    res.status(500).send("Failed to retrieve job details");
+  }
+});
 
 
 // Root route
