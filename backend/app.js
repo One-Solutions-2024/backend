@@ -330,16 +330,26 @@ app.get("/api/jobs/company/:companyname", async (req, res) => {
   }
 });
 
-app.get('/track-visitor', (req, res) => {
+app.get('/track-visitor', async (req, res) => {
   const visitorIp = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
-  // Exclude your IP address from being counted
-  if (visitorIp !== myIp && !visitors.has(visitorIp)) {
-    visitors.add(visitorIp); // Add unique visitor IP to the set
+  // Check if this IP has been tracked before
+  let visitor = await Pageview.findOne({ ip: visitorIp });
+
+  if (!visitor) {
+    // First time this IP is visiting, create a new record
+    visitor = new Pageview({ ip: visitorIp, views: 1 });
+    await visitor.save();
+  } else {
+    // IP has visited before, increment view count (optional)
+    visitor.views += 1;
+    await visitor.save();
   }
 
-  res.json({ visitorCount: visitors.size }); // Send the unique visitor count
+  const uniqueViewsCount = await Pageview.countDocuments(); // Total unique visitors
+  res.json({ uniqueViews: uniqueViewsCount });
 });
+
 
 
 // Root route
