@@ -375,7 +375,7 @@ app.get('/company/:companyname', async (req, res) => {
 
   try {
     const jobQuery = 'SELECT * FROM job WHERE LOWER(companyname) = LOWER(?)';
-    const job = await db.get(jobQuery, [companyName]);
+    const job = await database.get(jobQuery, [companyName]);
 
     if (job) {
       res.json(job);
