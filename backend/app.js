@@ -9,6 +9,11 @@ require("dotenv").config(); // Load environment variables
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const mongoose = require("mongoose"); // For MongoDB
+// Utility to convert slug back to a normal name
+const convertSlugToName = (slug) => slug.replace(/-/g, ' ').toLowerCase();
+
+// Use the MONGODB_URI from the .env file
+const mongoURI = process.env.MONGODB_URI;
 
 
 const PORT = process.env.PORT || 3000;
@@ -326,24 +331,20 @@ app.post(
   }
 );
 
-// Route to get job by company name
 app.get("/api/jobs/company/:companyname", async (req, res) => {
   const { companyname } = req.params;
+  
+  // Ensure the logic here is aligned with how the company name is stored
+  const getJobByCompanyNameQuery = `SELECT * FROM job WHERE LOWER(companyname) = LOWER(?);`;
+  const job = await database.get(getJobByCompanyNameQuery, [companyname]); // Use lowercase to ensure case-insensitive matching
 
-  try {
-    const getJobByCompanyNameQuery = `SELECT * FROM job WHERE companyname = ?;`;
-    const job = await database.get(getJobByCompanyNameQuery, [companyname]);
-
-    if (job) {
-      res.json(job);
-    } else {
-      res.status(404).json({ error: "Job not found" });
-    }
-  } catch (error) {
-    console.error(`Error fetching job by company name: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve job" });
+  if (job) {
+    res.json(job);
+  } else {
+    res.status(404).json({ error: "Job not found" });
   }
 });
+
 
 // Route to track visitor IPs and views
 app.get("/track-visitor", async (req, res) => {
@@ -368,6 +369,25 @@ app.get("/track-visitor", async (req, res) => {
   }
 });
 
+// Fetch job by company name
+app.get('/company/:companyname', async (req, res) => {
+  const companyName = convertSlugToName(req.params.companyname);
+
+  try {
+    const jobQuery = 'SELECT * FROM job WHERE LOWER(companyname) = LOWER(?)';
+    const job = await db.get(jobQuery, [companyName]);
+
+    if (job) {
+      res.json(job);
+    } else {
+      res.status(404).json({ message: 'Job not found' });
+    }
+  } catch (error) {
+    console.error('Error fetching job:', error);
+    res.status(500).json({ message: 'Error fetching job data' });
+  }
+});
+
 // Root route
 app.get("/", (req, res) => {
   res.send("Welcome to the Job Card Details API!");
@@ -375,6 +395,6 @@ app.get("/", (req, res) => {
 
 // MongoDB connection (example)
 mongoose
-  .connect("mongodb://localhost:27017/yourdbname", { useNewUrlParser: true, useUnifiedTopology: true })
+  .connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
