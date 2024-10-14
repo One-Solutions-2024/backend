@@ -1,3 +1,4 @@
+// Import required modules
 const express = require("express");
 const { open } = require("sqlite");
 const sqlite3 = require("sqlite3");
@@ -5,22 +6,27 @@ const path = require("path");
 const cors = require("cors");
 const helmet = require("helmet");
 const { body, validationResult } = require("express-validator");
-require("dotenv").config(); // Load environment variables
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
 const mongoose = require("mongoose"); // For MongoDB
+const fs = require("fs").promises; // For reading files
+require("dotenv").config(); // Load environment variables
+
 // Utility to convert slug back to a normal name
 const convertSlugToName = (slug) => slug.replace(/-/g, ' ').toLowerCase();
 
 // Use the MONGODB_URI from the .env file
 const mongoURI = process.env.MONGODB_URI;
-
-
 const PORT = process.env.PORT || 3000;
-
-
 const databasePath = path.join(__dirname, process.env.DB_PATH || "jobs.db");
 
+// Check if required environment variables are set
+if (!mongoURI) {
+  console.error("MONGODB_URI is not set in the environment variables.");
+  process.exit(1);
+}
+
+// Initialize Express app
 const app = express();
 
 // Middleware
@@ -29,10 +35,25 @@ app.use(cors());
 app.use(helmet()); // Basic security headers
 app.use(morgan('combined')); // Logging
 
+// Rate limiting
+const limiter = rateLimit({
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
+});
+app.use(limiter); // Apply rate limiting to all routes
 
-
+// Database connection variable
 let database = null;
 
+// MongoDB model for visitor tracking (example)
+const PageviewSchema = new mongoose.Schema({
+  ip: String,
+  views: { type: Number, default: 1 },
+});
+
+const Pageview = mongoose.model("Pageview", PageviewSchema);
+
+// Initialize database and server
 const initializeDbAndServer = async () => {
   try {
     database = await open({
@@ -40,7 +61,7 @@ const initializeDbAndServer = async () => {
       driver: sqlite3.Database,
     });
 
-    // Modify the table to include an image_link column
+    // Create the job table if it doesn't exist
     await database.run(`
       CREATE TABLE IF NOT EXISTS job (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -55,150 +76,26 @@ const initializeDbAndServer = async () => {
     // Insert jobs if table is empty (including image links)
     const jobsCount = await database.get(`SELECT COUNT(*) as count FROM job;`);
     if (jobsCount.count === 0) {
-      await database.run(`
-        INSERT INTO job (companyname, title, description, apply_link, image_link) VALUES 
-        ('Mitsogo',
-        'Product Support Engineer', 
-        'B.E/B.Tech , 2024 and 2023 passed out, Flexible to work in shifts, including a willingness to work on a 24/5 rotational basis., Strong analytical and problem-solving skills., Excellent communication skills and a passion for customer service.,Basic knowledge of multiple platforms (Windows/Mac/iOS/Android) is a plus, Location: Chennai (Work from Office)', 
-        'https://forms.office.com/pages/responsepage.aspx?id=KqbnxBjPTUqTeDaRUh_kTkpZb4Wf4idCqyoir4p7sZ5UQlFTR0tEM1dCRVRKSjdYVE5YV0pMWkRJUy4u&route=shorturl',
-        'https://media.glassdoor.com/l/fb/32/a8/54/mitsogo-reception-wall.jpg'),
+      const data = await fs.readFile("jobs.json", "utf8");
+      const jobList = JSON.parse(data); // Parse the JSON data into a JavaScript object
 
-        ('Stripe',
-        'Software Engineer, Intern', 
-        'Bachelors/Masters degree/PhD 2025 | 2026,At least 2 years of university education or equivalent work experience, Some experience and familiarity with programming either through side projects or classwork., We work mostly in Java/ Ruby/ JavaScript/ Scala and Go., We believe new programming languages can be learned if the fundamentals and general knowledge are present, Experience from previous internships or other multi-person projects including open source contributions that demonstrate evaluating and receiving feedback from mentors peers and stakeholders, Familiarity with navigating and managing your work in new code bases with multiple languages, Location: Bengaluru', 
-        'https://stripe.com/jobs/listing/software-engineer-intern/6109583/apply?gh_src=73vnei',
-        'https://th.bing.com/th/id/OIP.xJ9kBm4ui7x7ZdRQLy8yrAHaE8?pid=ImgDet&w=474&h=316&rs=1'),
+      // Insert each job into the database
+      const insertJobQuery = `
+        INSERT INTO job (companyname, title, description, apply_link, image_link)
+        VALUES (?, ?, ?, ?, ?);
+      `;
 
-        ('Wipro',
-        'Trainee/Manual Testing.', 
-        'B.Tech / BE (CS, IT and ECE) / MCA only. 2024 pass out only.,Excellent communication skills (Oral written and listening ability)., Knowledge of Software Development Life Cycle (SDLC) principles/concepts., Principles of automation testing and some exposure might be desirable., Knowledge of system testing and software quality assurance best practices and methodologies., Ability to break down a complex problem into smaller more manageable pieces and able to understand and describe the relationships between those pieces (i.e. good analytical skills)., Apply basic relational database concepts (e.g. table relationships keys SQL and DB2 queries etc)., Experience with systems implementations, Writes intermediate SQL queries, Troubleshoots intermediate system defects and errors, Effectively manage tasks, prioritizes and proactively update status to Managers., Should be able to tie test plans to real time customer impact, Good Understanding of Data Analysis, Analyzes and debug issues, Utilizes relevant problem-solving resources as needed, Location: Bengaluru', 
-        'https://careers-wipro.icims.com/jobs/3111385/login?_jsqid=fea9dbfe-9b0b-4ccb-b99e-4c6c740e03a4&_sp=8f66a2e6-1c42-41c2-876f-ffc42f934bf9.1728280001877&_ga=2.10040498.649037331.1728279572-2118722387.1725185858&_gl=1*ag753p*_ga*MjExODcyMjM4Ny4xNzI1MTg1ODU4*_ga_5Y2BYGL910*MTcyODI3OTU3Mi4zLjEuMTcyODI3OTk4OS4zMy4wLjA.&mobile=false&width=1150&height=500&bga=true&needsRedirect=false&jan1offset=330&jun1offset=330',      
-        'https://bl-i.thgim.com/public/incoming/y22soj/article66785980.ece/alternates/LANDSCAPE_1200/IMG_BL24_States_wipro_2_1_K9ATO970.jpg'),
-        
-        ('COGNIZANT',
-        'IS MASS HIRING : ENGINEER TRAINEE.', 
-        'Degree in B.E/B.Tech of any branch (UG full time degree).,2024 batch can apply., At the time of registration consistent academic record of a minimum of 50% in X /XII/ Diploma/ UG & PG with no standing arrears in current education., At the time of joining all recruits need to have a minimum 50% aggregate in the pursuing degree with no standing arrears., Compensation – INR 4 00 000 per annum., Night shift allowance will be paid by the project.,Work Location : Bengaluru / Chennai / Coimbatore.',
-        'https://app.joinsuperset.com/join/#/signup/student/jobprofiles/b643e525-c83b-4505-9a10-a666be44f249',        
-        'https://static.toiimg.com/thumb/msid-112500237,width-1280,height-720,resizemode-4/112500237.jpg'),
-        
-        ('Capgemini',
-        'Software Engineer', 
-        'BE/BTech/ ME/MTech / MCA & MSC, Freshers 2023 & 2024, Communication: You should possess strong communication skills for effective interactions with project partners., Collaboration: You should demonstrate good interpersonal and collaboration skills, Flexibility: You should be willing to skill-up in multiple technologies and work in any Capgemini city location and travel as required., Initiative: You should be able to work independently, take initiative and manage a variety of activities concurrently.,Other Skills: Good analytical and problem-solving skill.,Location: Mumbai, Pune, Bangalore', 
-        'https://app.joinsuperset.com/join/#/signup/student/jobprofiles/6e4f8e33-c0a0-4348-83af-66cd8aa8ff9e', 
-        'https://sightsinplus.com/wp-content/uploads/2022/08/Capgemini-India-is-hiring-across-the-country-check-details-here.jpg'),
+      for (const job of jobList) {
+        await database.run(insertJobQuery, [
+          job.companyname,
+          job.title,
+          job.description,
+          job.apply_link,
+          job.image_link,
+        ]);
+      }
 
-         ('Simplotel Technologies',
-        'Data Automation Analyst', 
-        'Bachelor of Engineering required. MBA is a plus., 0-3 years of experience with scripts, data warehousing, and / or automation,  Hands-on experience (or proficiency with SQL and Python), Proficiency in data mining, mathematics, and statistical analysis, Keen attention to detail to ensure accuracy in data processing, analysis, and reporting , Strong analytical and problem-solving skills,Good communication and interpersonal skills.,Ability to work effectively within a team and collaborate with cross-functional departments,Experience in data reporting and proficiency in SQL are advantageous for querying and managing relational databases.,Location:Bangalore', 
-        'https://app.joinsuperset.com/join/#/signup/student/jobprofiles/6e4f8e33-c0a0-4348-83af-66cd8aa8ff9e', 
-        'https://ratetiger.com/wp-content/uploads/2021/07/simplotel-PR.jpg'),
-
-        ('Genpact',
-        'Technical Associate', 
-        'BE/ BTech/ MCA, 2018/ 2019/ 2020/ 2021/ 2022/ 2023/ 2024, Experience with writing clean code in Java, Excellent oral and written communication skills  , Strong knowledge of technology security controls (Authentication, Authorization and Encryption of data, Single Sign On, Data retention/deletion etc.), Understanding of PII data and applicable controls to safeguard it., Good analytical skills , Proficient in PowerPoint and Excel', 
-        'https://genpact.taleo.net/careersection/sgy_external_career_section/jobdetail.ftl?job=ITO083797', 
-        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTbaYaam0-ve4j-3cnccZ7akzMNwmGoF2e8NA&s'),
-
-        
-         ('Zebra',
-        'SOFTWARE ENGINEER', 
-        'BTech/ MTech, Freshers(0-2yrs), Establishes requirements for less complex design projects, Works on Completing all phases of Software engineering design projects, Works on analysis of processes and delivers results to necessary stakeholder, Strong Works with latest technologies and new approaches, Multi-threading, Multi process handling and Memory management., Work Location : Pune.', 
-        'https://careers.zebra.com/careers/job/343622504714?domain=zebra.com', 
-        'https://fortune.com/img-assets/wp-content/uploads/2024/05/GPTW-2024-Chicago-Large-Zebra-Technologies-Corporation_US1__20240410151431_4.jpg?w=1440&q=75'),
-
-         ('Trimble',
-        'Customer Support', 
-        'Any Graduate, Freshers(0-1yrs), Process-oriented with high attention to detail, Basic knowledge of computer MS Windows & MS Office, Problem solving and analytical skills, Excellent written and verbal communication skills.,Basic knowledge of Google Workspace, Work Location : Chennai India.', 
-        'https://careers.zebra.com/careers/job/343622504714?domain=zebra.com', 
-        'https://bsmedia.business-standard.com/_media/bs/img/article/2022-03/30/full/20220330181036.jpg'),
-
-       
-        ('Cognizant',
-        'Associate - Projects', 
-        'Possess a strong background in SAP EWM Testing, Demonstrate specialized skills in EWM, Exhibit excellent problem-solving abilities, Show proficiency in developing test plans, Have experience in defect tracking and resolution, Display strong communication skills, Be familiar with industry standards, Mentor and guide junior team members, Work Location: Hybrid', 
-        'https://cognizant.taleo.net/careersection/Lateral/jobapply.ftl?job=00060120911&lang=en&source=CWS-13082&src=CWS-13082', 
-        'https://static.toiimg.com/thumb/msid-112500237,width-1280,height-720,resizemode-4/112500237.jpg'),
-
-       
-        ('Razor Infotech',
-        'Python and MERN Stack developer', 
-        'Bachelor’s degree in Computer Science Information Technology or a related field., 2 - 3 LPA, Minimum of 1 year of professional experience in Python programming., Hands-on experience with the MERN stack:, MongoDB: Proficient in database design and querying., Express.js: Experience in building RESTful APIs., React.js: Skilled in developing user interfaces and managing state., Node.js: Proficient in server-side scripting., Familiarity with front-end technologies such as HTML5, CSS3, and JavaScript., Experience with version control systems, particularly Git., Work Location: In Office Delhi', 
-        'https://unstop.com/competitions/1164238/register', 
-        'https://d8it4huxumps7.cloudfront.net/uploads/images/150x150/66ed1954a4079_organisation_image-UuScTTlJli1498478550WQzm7rzD0E.png?d=200x200'),
-        
-        ('Intelliworkz',
-        'Fronted Developer', 
-        'Bachelor’s degree in Computer Science Information Technology or a related field., Strong knowledge of HTML5 and CSS3 structure elements tags and attributes., Experience with media queries for responsiveness., Optimizing HTML code for search engines., Familiarity with basic JavaScript for adding interactive elements (drop-down menus, sliders, form validation)., Knowledge of JavaScript libraries like jQuery for easier DOM manipulation., Figma  to HTML design., Exp: 1 - 2 yrs,  Work Location: IAhmedabad', 
-        'https://unstop.com/competitions/1163414/register', 
-        'https://images.yourstory.com/cs/images/companies/404e7f741540-925D6B6558F2414F8714EB3C0A2C5973-1660197102039.jpg?fm=auto&ar=1:1&mode=fill&fill=solid&fill-color=fff'),
-        
-         ('Amazon',
-        'Associate ', 
-        'Any graduate., 2017-2018-2019-2020-2021-2022-2023-2024., Work Experience: 0 to 1 years., Communication Skills- Excellent communication skills (written and spoken) in English language., Ability to handle and interpret large sets of data, Work Location: WFH', 
-        'https://amazonvirtualhiring.hirepro.in/registration/incta/ju0f4/apply/?j=58164&e=14190', 
-        'https://media.istockphoto.com/id/1317474419/photo/amazon.jpg?s=612x612&w=0&k=20&c=XfMWt3qTPFbhq_82ZejFTryb_v-HXRNOqxPizblgLj0='),
-        
-         ('Ey',
-        'Assurance - Associate', 
-        ' B.com Graduates, 2021-2022-2023-2024, Work Experience: 0 to 1 years., Strong interpersonal and good written & oral communication skills., Robust logical and reasoning skills , Basis knowledge on MS – Excel Ms - Office,Interest in business and commerciality.,  Work Location: Noida', 
-        'https://careers.ey.com/ey/job/Noida-Assurance-Associate-UP-201301/1120452901/', 
-        'https://bsmedia.business-standard.com/_media/bs/img/article/2024-02/12/full/1707678091-5108.jpg?im=FitAndFill=(826,465)'),
-       
-        ('Kpmg',
-        'QA Engineer', 
-        'Bachelor’s degree or equivalent experience required, No prior experience required, Study or experience focused on one of the following or equivalent: quality engineering, quality systems, systems monitoring, computer systems management, Ability to clearly articulate ideas, such as current state and optimal state of a given system, Experience with test automation frameworks such as Selenium, Cypress, or Java tools preferred, Work Location: Bangalore', 
-        'https://unstop.com/o/QYKRL4I?utm_medium=Share&utm_source=shortUrl', 
-        'https://i0.wp.com/opportunitycell.com/wp-content/uploads/2022/12/KPMG-London.png?fit=1000%2C667&ssl=1'),
-
-        ('GE',
-        'Software Development Engineer', 
-        'GE Digital Career 2024 Invites Students From Various Disciplines to apply for the Position of Software Development Engineer in Hyderabad, India, Freshers/Experienced, Bachelor’s Degree in Computer Science or “STEM” Majors (Science, Technology, Engineering and Math) with basic experience, Expertise in Java programming, particularly in Object-Oriented Programming (OOP) concepts, The ideal candidate should have a proven track record in implementing REST endpoints and a strong background in utilizing the Spring Boot framework, including Spring Security, Spring JPA, and Spring MVC, Proficient in front-end technologies like Angular, HTML5, and CSS, Write Unit Tests using JUnit for ensuring code quality and reliability, Experience with dependency management tools like Gradle or Maven for project build automation, Work on core data structures and algorithms and implement them using language of choice, Work Location: Hyderabad, India (Hybrid)', 
-        'https://jobs.gecareers.com/global/en/apply?jobSeqNo=GE11GLOBALR3780300EXTERNALENGLOBAL&step=1&stepname=personalInformation', 
-        'https://job4software.com/wp-content/uploads/2024/09/gettyimages-868982314-scaled.webp'),
-
-        ('Amazon',
-        'Device Associate', 
-        'Graduate, preferably in a quantitative field of study with relevant experience of 0-1 years, Good communication skills, detail-oriented, and be a team player, Knowledge of QA methodology and tools, Gain understanding of the application test procedures and how to use applicable software and tools, Execute test instructions and report test results accurately and promptly, Report any deviations observed, Understand any changes in test instructions related to their assigned work', 
-        'https://www.amazon.jobs/en/jobs/2769644/device-associate', 
-        'https://etimg.etb2bimg.com/photo/91892300.cms'),
-
-        ('Sutherland',
-        'International Voice Process-Hyderabad', 
-        'Must be fluent in English, Excellent communication skills can apply, Both freshers and experienced candidates can apply, Graduation is not mandatory, 24/7 shifts and rotational week offs (5 days working a week), Immediate joiners only, Out of station candidates are strictly not eligible', 
-        'https://www.naukri.com/job-listings-hiring-freshers-experience-for-international-voice-process-hyderabad-sutherland-hyderabad-1-to-3-years-110924019859?utmcampaign=androidjd&utmsource=share&src=sharedjd', 
-        'https://pbs.twimg.com/media/FNVOGCyacAAuQem.jpg'),
-
-        ('HCL',
-        'Hiring Email & Chat Support', 
-        'HCL Tech Walk-In Drive 2024, Any Degree, Basic understanding of HTML, JavaScript & CSS, Knowledge of technical troubleshooting, Strong analytical skills, Willingness to work in night shifts, Good computer navigation skills', 
-        'https://www.naukri.com/job-listings-hcltech-walk-in-drive-email-chat-support-14th-15th-sep-hyderabad-hcltech-hyderabad-1-to-5-years-110924020680?utmcampaign=androidjd&utmsource=share&src=sharedjd', 
-        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSt1VGT9Q_oR45MkKkJJTYd1vuxacMtSmZf1BLACRNwH38V6Okh1lc8Nh3vI1ZIa4jh9aU&usqp=CAU'),
-
-        ('KPMG',
-        'Data Engineer', 
-        'Bachelors degree in computer science or related field, Excellent communication and team collaboration skills, Should have experience in Data and Analytics and overseen end-to-end implementation of data pipelines on cloud-based data platforms, Strong programming skills in Python, PySpark and some combination of Java, Scala (good to have), Experience writing SQL, Structuring data, and data storage practices, Experience in PySpark for Data Processing and transformation, Experience building stream-processing applications (Spark Streaming, Apache Flink, Kafka, etc.), Debug and upgrade existing systems, Nice to have some knowledge in DevOps, Work Location: Bangalore', 
-        'https://ejgk.fa.em2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/INTG10019786/apply/email', 
-        'https://i0.wp.com/opportunitycell.com/wp-content/uploads/2022/12/KPMG-London.png?fit=1000%2C667&ssl=1'),
-       
-        ('Uber',
-        'Data Engineer II', 
-        'Bachelors degree in Computer Science or related technical field or equivalent practical experience, Experience coding using general purpose programming languages (e.g., Java, Python, Go, JavaScript, Fusion), Understanding and exposure to data tech stack e.g., Spark, Hive, Strong desire to learn and grow while building outstanding systems, Coding chops, clean, elegant, bug-free code in languages like JS, React, Node.js, open to new stacks as needed, Ability to identify and resolve performance and scalability issues, Work Location: Bangalore',  
-        'https://www.uber.com/careers/apply/interstitial/133571?uclick_id=e180fbe2-4219-4b03-bf9d-9358d3cddb84', 
-        'https://img.etimg.com/thumb/width-1200,height-1200,imgsize-40032,resizemode-75,msid-105470730/tech/technology/uber-rolls-out-rewards-programme-uber-pro-for-drivers-in-12-cities.jpg'),
-
-        ('Kreativstorm',
-        'Python Developer - Intern', 
-        'Students pursuing a degree or recent graduates in Computer Science, Information Technology, or a related field, Aspiring Python developers with a strong interest in software development, Analytical thinkers adept at solving complex programming challenges, Effective communicators who thrive in collaborative team environments, Enthusiastic learners committed to refining their Python development skills, Proficiency in Python programming language and related technologies (e.g., Django, Flask) is highly valued, Familiarity with software development lifecycle and best practices advantageous, Work Location: Hyderabad', 
-        'https://kreativstorm.zohorecruit.eu/jobs/Careers/69764000051925815', 
-        'https://kreativstorm.zohorecruit.eu/recruit/viewCareerImage.do?page_id=69764000000401668&type=logo&file_name=256x256_transparent.png'),
-
-        ('Splunk',
-        'Technical Support Engineer', 
-        'Basic understanding of networking concepts (TCP/IP, UDP, DNS, NAT, gateways, etc.), Excellent time management skills with the ability to adapt to changing priorities of customer issues, Outstanding interpersonal skills and excellent communication, Develop and maintain a deep understanding of the Splunk product and related technologies, with a focus on our core platform, Drive continuous improvement of tools, processes, and product supportability, Work Location: Hyderabad, India', 
-        'https://www.splunk.com/en_us/careers/jobs/technical-support-engineer-cloud-30829', 
-        'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQSBLLLkyDaLgoJoJQMyzuwPUsTt1sW5kTaow&s');
-
-      `);
+      console.log("Job data has been imported successfully.");
     }
 
     app.listen(PORT, () => {
@@ -211,30 +108,11 @@ const initializeDbAndServer = async () => {
   }
 };
 
-initializeDbAndServer();
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-});
-app.use(limiter); // Apply rate limiting to all routes
-
-// Async handler to avoid repetitive try-catch
-const asyncHandler = (fn) => (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-
 // Middleware for error handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: 'Something went wrong!' });
 });
-/// MongoDB model for visitor tracking (example)
-const PageviewSchema = new mongoose.Schema({
-  ip: String,
-  views: { type: Number, default: 1 },
-});
-
-const Pageview = mongoose.model("Pageview", PageviewSchema);
 
 // Route to get all jobs with pagination
 app.get("/api/jobs", async (req, res) => {
@@ -331,20 +209,24 @@ app.post(
   }
 );
 
+// Fetch job by company name
 app.get("/api/jobs/company/:companyname", async (req, res) => {
   const { companyname } = req.params;
   
-  // Ensure the logic here is aligned with how the company name is stored
   const getJobByCompanyNameQuery = `SELECT * FROM job WHERE LOWER(companyname) = LOWER(?);`;
-  const job = await database.get(getJobByCompanyNameQuery, [companyname]); // Use lowercase to ensure case-insensitive matching
+  try {
+    const job = await database.get(getJobByCompanyNameQuery, [companyname]); // Use lowercase to ensure case-insensitive matching
 
-  if (job) {
-    res.json(job);
-  } else {
-    res.status(404).json({ error: "Job not found" });
+    if (job) {
+      res.json(job);
+    } else {
+      res.status(404).json({ error: "Job not found" });
+    }
+  } catch (error) {
+    console.error(`Error fetching job by company name: ${error.message}`);
+    res.status(500).json({ error: "Failed to fetch job" });
   }
 });
-
 
 // Route to track visitor IPs and views
 app.get("/track-visitor", async (req, res) => {
@@ -369,25 +251,6 @@ app.get("/track-visitor", async (req, res) => {
   }
 });
 
-// Fetch job by company name
-app.get('/company/:companyname', async (req, res) => {
-  const companyName = convertSlugToName(req.params.companyname);
-
-  try {
-    const jobQuery = 'SELECT * FROM job WHERE LOWER(companyname) = LOWER(?)';
-    const job = await database.get(jobQuery, [companyName]);
-
-    if (job) {
-      res.json(job);
-    } else {
-      res.status(404).json({ message: 'Job not found' });
-    }
-  } catch (error) {
-    console.error('Error fetching job:', error);
-    res.status(500).json({ message: 'Error fetching job data' });
-  }
-});
-
 // Root route
 app.get("/", (req, res) => {
   res.send("Welcome to the Job Card Details API!");
@@ -398,3 +261,6 @@ mongoose
   .connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
   .then(() => console.log("MongoDB connected"))
   .catch((err) => console.error("MongoDB connection error:", err));
+
+// Start the application
+initializeDbAndServer();
