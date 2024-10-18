@@ -71,34 +71,9 @@
         "apply_link": "https://genpact.taleo.net/careersection/sgy_external_career_section/jobdetail.ftl?job=ITO083797",
         "image_link": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTbaYaam0-ve4j-3cnccZ7akzMNwmGoF2e8NA&s"
     },
-    {
-        "companyname": "Zebra",
-        "title": "SOFTWARE ENGINEER",
-        "description": "BTech/ MTech, Freshers(0-2yrs), Establishes requirements for less complex design projects, Works on Completing all phases of Software engineering design projects, Works on analysis of processes and delivers results to necessary stakeholder, Strong Works with latest technologies and new approaches, Multi-threading, Multi process handling and Memory management., Work Location : Pune.",
-        "apply_link": "https://careers.zebra.com/careers/job/343622504714?domain=zebra.com",
-        "image_link": "https://fortune.com/img-assets/wp-content/uploads/2024/05/GPTW-2024-Zebra-Headquarters-Press-Release.jpg"
-    },
-    {
-        "companyname": "WIPRO",
-        "title": "Data Engineer",
-        "description": "BE/BTech/MCA, Freshers 2023 and 2024., Experience with Python or Java (with SQL) would be preferred, Should have some exposure to Big Data technologies like Hadoop, Spark, Kafka, etc., Knowledge of Data warehousing concepts and cloud technologies, Location: Pune.",
-        "apply_link": "https://careers.wipro.com/workarea/JobDetails.aspx?id=49890",
-        "image_link": "https://www.wipro.com/content/dam/nexus/en/newsroom/2022/march/Blue-collar-workers-at-Wipro-IMG-1.jpg"
-    },
-    {
-        "companyname": "TCS",
-        "title": "Trainee Engineer",
-        "description": "B.E / B.Tech / M.E / M.Tech (All branches except Bio-Tech / Bio-Medical), 2023-2024 batch only, Freshers, Good communication skills, Basic knowledge of programming, Understanding of SDLC, Location: Pan India.",
-        "apply_link": "https://www.tcs.com/careers",
-        "image_link": "https://www.careers.tcs.com/Content/assets/images/tdc_2021_home_v5.png"
-    },
-    {
-        "companyname": "Cognizant",
-        "title": "Data Engineer",
-        "description": "Full Time B.E/B.Tech/MCA/B.Sc/M.Sc in relevant streams of Computer Science., 2024-2025 graduates are preferred., Good knowledge of Python, SQL, and NoSQL databases., Experience with data analysis and data processing is a plus., Location: Pune",
-        "apply_link": "https://cognizant.wd5.myworkdayjobs.com/en-US/cognizant/job/Pune/Data-Engineer--Graduate-2024-2025--Entry-Level--Full-Time_4055547213-1",
-        "image_link": "https://www.cognizant.com/content/dam/cognizant/images/about-us/careers/careers-slide-2.jpg"
-    },
+   
+   
+   
     {
         "companyname": "Trimble",
         "title": "Customer Support",
