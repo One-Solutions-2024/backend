@@ -62,16 +62,19 @@ const initializeDbAndServer = async () => {
     });
 
     // Create the job table if it doesn't exist
-    await database.run(`
-      CREATE TABLE IF NOT EXISTS job (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        companyname TEXT NOT NULL,
-        title TEXT NOT NULL,
-        description TEXT NOT NULL,
-        apply_link TEXT NOT NULL,
-        image_link TEXT NOT NULL
-      );
-    `);
+    // Create the job table if it doesn't exist
+await database.run(`
+  CREATE TABLE IF NOT EXISTS job (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    companyname TEXT NOT NULL,
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    apply_link TEXT NOT NULL,
+    image_link TEXT NOT NULL,
+    createdAt DATETIME DEFAULT CURRENT_TIMESTAMP -- Add this line
+  );
+`);
+
 
     // Insert jobs if table is empty (including image links)
     const jobsCount = await database.get(`SELECT COUNT(*) as count FROM job;`);
@@ -120,8 +123,23 @@ app.get("/api/jobs", async (req, res) => {
 
   try {
     const offset = (page - 1) * parseInt(limit);
-    const getAllJobsQuery = `SELECT * FROM job LIMIT ? OFFSET ?;`;
-    const jobs = await database.all(getAllJobsQuery, [limit, offset]); // Parameterized query
+    // Get current timestamp
+    const currentTime = new Date();
+    // Calculate timestamp for 7 days ago
+    const sevenDaysAgo = new Date(currentTime.setDate(currentTime.getDate() - 7));
+
+    const getAllJobsQuery = `
+      SELECT *, 
+      CASE 
+        WHEN createdAt >= ? THEN 1 
+        ELSE 0 
+      END as isNew 
+      FROM job 
+      ORDER BY isNew DESC, createdAt DESC 
+      LIMIT ? OFFSET ?;
+    `;
+    
+    const jobs = await database.all(getAllJobsQuery, [sevenDaysAgo.toISOString(), limit, offset]); // Parameterized query
 
     if (jobs.length > 0) {
       res.json(jobs);
@@ -133,6 +151,7 @@ app.get("/api/jobs", async (req, res) => {
     res.status(500).json({ error: "Failed to retrieve jobs" });
   }
 });
+
 
 // Route to update a job
 app.put("/api/jobs/:id", async (req, res) => {
