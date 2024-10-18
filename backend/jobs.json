@@ -1,5 +1,25 @@
 [
-
+    {
+        "companyname": "Wipro",
+        "title": "Developer",
+        "description": "B.E/B.Tech , 2021/2022/2023/2024, Develop software solutions by studying information needs studying systems flow data usage and work processes, Investigating problem areas followed by the software development life cycl,Identify ideas to improve system performance and impact availability, Analyze client requirements and convert requirements to feasible design, Collaborate with functional teams or systems analysts who carry out the detailed investigation into software requirements,Conferring with project managers to obtain information on software capabilities, Location: Hyderabad/India; Bengaluru/India",
+        "apply_link": "https://technicalcareers-wipro.icims.com/jobs/3114481/login?_sp=d1f699e4-15df-4b3d-817a-2038e36cf20c.1729260169078&_jsqid=undefined&iis=Social+Media&iisn=Linkedin&utm_source=Linkedin&_ga=2.250854406.1617513336.1729259346-1525352971.1701252196&_gl=1*9g6ft0*_ga*MTUyNTM1Mjk3MS4xNzAxMjUyMTk2*_ga_5Y2BYGL910*MTcyOTI1OTM0Ni4zLjEuMTcyOTI1OTcxMS42MC4wLjA.",
+        "image_link": "https://www.enterpriseitworld.com/wp-content/uploads/2020/06/wipro.jpg"
+    },
+    {
+        "companyname": "Encore",
+        "title": "IT Application Development Intern – Summer 2025",
+        "description": "Bachelor's degree in process,Experience programming with C# or VB.Net,Experience programming with ASP.Net and client/server architecture desired,Experience working with JavaScript; JavaScript libraries; and frameworks,Experience writing T-SQL syntax in a Microsoft SQL Server environment,The ability to work in an agile and creative environment,Solid communication and customer service skills,Highly motivated individual with a passion for customer service follow-through and learning, Location Schiller Park/Illinois",
+        "apply_link": "https://recruiting2.ultipro.com/AUD1001AUDV/JobBoard/b1e2129f-5d09-48e8-b7ff-4e900458d8a9/OpportunityDetail?opportunityId=01c7b434-c557-4822-bcd7-077845ba6cf3&utm_campaign=General&utm_medium=job_posting&utm_content=social_media&utm_source=linkedin.com&utm_term=396106175&ss=paid&dclid=CNGX8PmOmIkDFbGNrAIdl8sYPg",
+        "image_link": "https://tbcdn.talentbrew.com/company/6228/26720/content/encore_logo_rgb.svg"
+    },
+    {
+        "companyname": "SLC Technologies",
+        "title": "Frontend Developer",
+        "description": "B.E/B.Tech , 2021/2022/2023/2024, Proven experience as a Front-End Developer with a focus on React and Tailwind CSS.,Strong proficiency in JavaScript (ES6+), HTML5, and CSS3.,Experience with state management libraries like Redux or Context API.,Familiarity with modern build tools like Webpack, Babel, Vite, or similar.,Experience with RESTful APIs,Familiarity with Git and version control workflows.,Good understanding of responsive design principles and cross-browser compatibility.,Strong communication skills and ability to work in a collaborative environment.",
+        "apply_link": "https://www.linkedin.com/jobs/view/4053150442.",
+        "image_link": "https://media.licdn.com/dms/image/v2/C4E0BAQFwY2ZeaRQ8VA/company-logo_200_200/company-logo_200_200/0/1630648512705/crezot_logo?e=1737590400&v=beta&t=b0W3LnN8DhnJFcp_kwutfy5-na_I4PCFh6dMJMgwNbY"
+    },
 
     {
         "companyname": "Mitsogo",
