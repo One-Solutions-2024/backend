@@ -236,7 +236,7 @@ app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
   const { companyname, url } = req.params;
   
   const getJobByCompanyNameQuery = `
-    SELECT * FROM job WHERE LOWER(companyname) = LOWER(?) AND LOWER(job_url) = LOWER(?);`; 
+    SELECT * FROM job WHERE LOWER(companyname) = LOWER(?) AND LOWER(url) = LOWER(?);`; 
   // Ensure both company name and job URL match
 
   try {
