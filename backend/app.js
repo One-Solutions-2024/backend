@@ -231,13 +231,16 @@ app.post(
   }
 );
 
-// Fetch job by company name
-app.get("/api/jobs/company/:companyname", async (req, res) => {
-  const { companyname } = req.params;
+// Fetch job by company name and job URL
+app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
+  const { companyname, url } = req.params;
   
-  const getJobByCompanyNameQuery = `SELECT * FROM job WHERE LOWER(companyname) = LOWER(?);`;
+  const getJobByCompanyNameQuery = `
+    SELECT * FROM job WHERE LOWER(companyname) = LOWER(?) AND LOWER(url) = LOWER(?);`; 
+  // Ensure both company name and job URL match
+
   try {
-    const job = await database.get(getJobByCompanyNameQuery, [companyname]); // Use lowercase to ensure case-insensitive matching
+    const job = await database.get(getJobByCompanyNameQuery, [companyname, url]);
 
     if (job) {
       res.json(job);
@@ -245,10 +248,11 @@ app.get("/api/jobs/company/:companyname", async (req, res) => {
       res.status(404).json({ error: "Job not found" });
     }
   } catch (error) {
-    console.error(`Error fetching job by company name: ${error.message}`);
+    console.error(`Error fetching job by company name and URL: ${error.message}`);
     res.status(500).json({ error: "Failed to fetch job" });
   }
 });
+
 
 // Route to track visitor IPs and views
 app.get("/track-visitor", async (req, res) => {
