@@ -71,6 +71,7 @@ await database.run(`
     description TEXT NOT NULL,
     apply_link TEXT NOT NULL,
     image_link TEXT NOT NULL,
+    url TEXT NOT NULL,
     createdAt DATETIME DEFAULT CURRENT_TIMESTAMP -- Add this line
   );
 `);
@@ -84,8 +85,8 @@ await database.run(`
 
       // Insert each job into the database
       const insertJobQuery = `
-        INSERT INTO job (companyname, title, description, apply_link, image_link)
-        VALUES (?, ?, ?, ?, ?);
+        INSERT INTO job (companyname, title, description, apply_link, image_link, url)
+        VALUES (?, ?, ?, ?, ?, ?);
       `;
 
       for (const job of jobList) {
@@ -95,6 +96,7 @@ await database.run(`
           job.description,
           job.apply_link,
           job.image_link,
+          job.url,
         ]);
       }
 
@@ -156,7 +158,7 @@ app.get("/api/jobs", async (req, res) => {
 // Route to update a job
 app.put("/api/jobs/:id", async (req, res) => {
   const { id } = req.params;
-  const { companyname, title, description, apply_link, image_link } = req.body;
+  const { companyname, title, description, apply_link, image_link, url } = req.body;
 
   try {
     // Check if the job exists
@@ -167,10 +169,10 @@ app.put("/api/jobs/:id", async (req, res) => {
 
     const updateJobQuery = `
       UPDATE job
-      SET companyname = ?, title = ?, description = ?, apply_link = ?, image_link = ?
+      SET companyname = ?, title = ?, description = ?, apply_link = ?, image_link = ?, url = ?
       WHERE id = ?;
     `;
-    await database.run(updateJobQuery, [companyname, title, description, apply_link, image_link, id]);
+    await database.run(updateJobQuery, [companyname, title, description, apply_link, image_link, url,  id]);
     res.json({ message: "Job updated successfully" });
   } catch (error) {
     console.error(`Error updating job: ${error.message}`);
@@ -207,19 +209,20 @@ app.post(
     body("description").notEmpty(),
     body("apply_link").isURL(),
     body("image_link").isURL(),
+    body("url").isURL(),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { companyname, title, description, apply_link, image_link } = req.body;
+    const { companyname, title, description, apply_link, image_link, url } = req.body;
 
     try {
       const insertJobQuery = `
-        INSERT INTO job (companyname, title, description, apply_link, image_link)
-        VALUES (?, ?, ?, ?, ?);
+        INSERT INTO job (companyname, title, description, apply_link, image_link, url)
+        VALUES (?, ?, ?, ?, ?, ?);
       `;
-      await database.run(insertJobQuery, [companyname, title, description, apply_link, image_link]);
+      await database.run(insertJobQuery, [companyname, title, description, apply_link, image_link, url]);
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error("Failed to add job:", error);
