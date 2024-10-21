@@ -231,27 +231,32 @@ app.post(
   }
 );
 
-// Fetch job by company name and job URL
-app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
+// API route to get job details by companyname and joburl
+app.get('/api/jobs/:companyname/:url', (req, res) => {
   const { companyname, url } = req.params;
-  
-  const getJobByCompanyNameQuery = `
-    SELECT * FROM job WHERE LOWER(companyname) = LOWER(?) AND LOWER(url) = LOWER(?);`; 
-  // Ensure both company name and job URL match
 
-  try {
-    const job = await database.get(getJobByCompanyNameQuery, [companyname, url]);
+  // Find the job from the data source (or fetch from a database)
+  const job = jobData.find(
+    (job) =>
+      job.companyname.toLowerCase() === companyname.toLowerCase() &&
+      job.url.toLowerCase() === url.toLowerCase()
+  );
 
-    if (job) {
-      res.json(job);
-    } else {
-      res.status(404).json({ error: "Job not found" });
-    }
-  } catch (error) {
-    console.error(`Error fetching job by company name and URL: ${error.message}`);
-    res.status(500).json({ error: "Failed to fetch job" });
+  // If job not found, return a 404 error
+  if (!job) {
+    return res.status(404).json({ error: 'Job not found' });
   }
+
+  // Return the job data as JSON
+  res.json({
+    companyname: job.companyname,
+    title: job.title,
+    description: job.description,
+    apply_link: job.apply_link,
+    image_link: job.image_link,
+  });
 });
+
 
 
 // Route to track visitor IPs and views
