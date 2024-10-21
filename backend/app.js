@@ -231,31 +231,29 @@ app.post(
   }
 );
 
-// API route to get job details by companyname and joburl
-app.get('/api/jobs/company:companyname/:url', (req, res) => {
+// Fetch job by company name and job URL
+app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
   const { companyname, url } = req.params;
+  
+  const getJobByCompanyNameQuery = `
+    SELECT * FROM job WHERE LOWER(companyname) = LOWER(?) AND LOWER(job_url) = LOWER(?);`; 
+  // Ensure both company name and job URL match
 
-  // Find the job from the data source (or fetch from a database)
-  const job = jobData.find(
-    (job) =>
-      job.companyname.toLowerCase() === companyname.toLowerCase() &&
-      job.url.toLowerCase() === url.toLowerCase()
-  );
+  try {
+    const job = await database.get(getJobByCompanyNameQuery, [companyname, url]);
 
-  // If job not found, return a 404 error
-  if (!job) {
-    return res.status(404).json({ error: 'Job not found' });
+    if (job) {
+      res.json(job);
+    } else {
+      res.status(404).json({ error: "Job not found" });
+    }
+  } catch (error) {
+    console.error(`Error fetching job by company name and URL: ${error.message}`);
+    res.status(500).json({ error: "Failed to fetch job" });
   }
-
-  // Return the job data as JSON
-  res.json({
-    companyname: job.companyname,
-    title: job.title,
-    description: job.description,
-    apply_link: job.apply_link,
-    image_link: job.image_link,
-  });
 });
+
+
 
 
 
