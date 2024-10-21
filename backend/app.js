@@ -232,7 +232,7 @@ app.post(
 );
 
 // API route to get job details by companyname and joburl
-app.get('/api/jobs/:companyname/:url', (req, res) => {
+app.get('/api/jobs/company:companyname/:url', (req, res) => {
   const { companyname, url } = req.params;
 
   // Find the job from the data source (or fetch from a database)
