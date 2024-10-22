@@ -1,5 +1,37 @@
 [
     {
+        "companyname": "Deloite",
+        "title": "ANALYST – FRENCH SUPPORT – HYD/BLR",
+        "description": "Any Bachelor's/Master's degree,2021/2022/2023/2024/ batches can apply,Excellent written verbal listening analytical skills.,Knowledge of MS Office 2010 2013 including Outlook.,Knowledge of computer hardware and software,Knowledge of Operating Systems like Windows 10 and MacOS.,Knowledge of network and internet.,Work Location : Hyderabad Bengaluru.",
+        "apply_link": "https://usijobs.deloitte.com/careersUSI/JobDetail/USI-EH25-Global-CoRe-GCC-French-Support-Analyst/188628",
+        "image_link": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTI0RZntEexwcPF7WapYKdcpjG0FeqQVYVCKQ&s",
+        "url": "deloitte-is-hiring-analyst-french-support-hyd-blr"
+    },
+    {
+        "companyname": "SIEMENS",
+        "title": " SYSTEM ENGINEER (FRESHERS)",
+        "description": "Freshers with B.Tech/M. tech in Electrical/Electrical & Electronics Engineering / Diploma in Electrical/Electrical & Electronics with relevant experience,2021/2022/2023/2024/ batches can apply,Shall have good knowledge of basic computer applications specially Excel Word Power point etc.,Should possess excellent interpersonal and communication skills (both verbal and written),Design engineering of Control Protection & Automation systems / panels.,Preparation of Basic / Detailed design documentation – Control and protection layout bill of material and schematic preparations configuration architecture and required documentations as outlined in the project scope,Work Location : Gurugram.",
+        "apply_link": "https://jobs.siemens.com/careers/job/563156117078995?hl=en",
+        "image_link": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSST5MEgiVxLUhynNN5B_CmpZLw8ZlmR6n7hQ&s",
+        "url": "siemens-is-hiring-system-engineer-freshers"
+    },
+    {
+        "companyname": "WabTec",
+        "title": " INTERN – ENGINEERING",
+        "description": " Any Bachelor's/Master's degree,2021/2022/2023/2024/ batches can apply,Should have knowledge on programming (C/C++/Java/Python),Should have knowledge on frontend technologies such as Angular JS Java Scripts etc,Possess good understanding of RDBMS,Good knowledge on Data structure Algorithms is required.,Work Location : Bengaluru.",
+        "apply_link": "https://wabtec.wd1.myworkdayjobs.com/en-US/wabtec_careers/job/Bengaluru-India/Intern---Engineering_R0088569",
+        "image_link": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSOPi5IIOeVAunFlIukFyg22NHSUIKIbZcNLw&s",
+        "url": "wabtec-is-hiring-intern-engineering-2"
+    },
+    {
+        "companyname": "EY",
+        "title": "CONSULTANT – .NET AND ANGULAR FULL STACK ENGINEER",
+        "description": "Any Bachelor's/Master's degree,2021/2022/2023/2024/ batches can apply.Strong Experience on ASP.NET Core MVC Angular TypeScript SCSS Json,Strong knowledge of JavaScript CSS3 HTML5 Angular Material UI Bootstrap Flexbox,Nice to have experience in responsive web design using media queries,Strong knowledge and experience in developing APIs using REST protocol,Should have in depth understanding and experience of database technologies like SQL Server Cosmos DB etc.,Experience with distributed computing and scalable systems,Work Location : Trivandrum.",
+        "apply_link": "https://careers.ey.com/ey/job/Trivandrum-Consultant-_NET-and-Angular-Full-Stack-Engineer-KL-695581/1130032701/",
+        "image_link": "https://bsmedia.business-standard.com/_media/bs/img/article/2024-02/12/full/1707678091-5108.jpg?im=FitAndFill=(826,465)",
+        "url": "ey-is-hiring-consultant-net-and-angular-full-stack-engineer"
+    },
+    {
         "companyname": "Motorola",
         "title": "Software Engineer (C++ and Golang)",
         "description": "Expertise in C++ programming language.,Hands-on experience in Go language,Solid understanding of algorithms data structures and object-oriented programming concepts.,Familiarity with debugging techniques using GDB (GNU Debugger) and Valgrind.,Familiarity with network packet analysis using Wireshark.,Good Knowledge on network protocols such as TCP/IP UDP.,Excellent problem-solving and analytical skills.,Strong communication and teamwork abilities.",
@@ -7,7 +39,6 @@
         "image_link": "https://naukrisafar.com/wp-content/uploads/2024/08/motorola-building.jpeg",
         "url": "Hiring-Freshers-For-Software-Engineer-C-and-Golang"
     },
-    
     {
         "companyname": "Amazon",
         "title": "Device Associate",
@@ -15,7 +46,6 @@
         "apply_link": "https://www.amazon.jobs/en/jobs/2804594/device-associate?utm_source=jobscoupe.com",
         "image_link": "https://media.istockphoto.com/id/1317474419/photo/amazon.jpg?s=612x612&w=0&k=20&c=XfMWt3qTPFbhq_82ZejFTryb_v-HXRNOqxPizblgLj0=",
         "url": "Hiring-Freshers-For-Device-Associate"
-
     },
     {
         "companyname": "EY",
@@ -24,7 +54,6 @@
         "apply_link": "https://careers.ey.com/ey/job/Trivandrum-Associate-Analyst-KL-695581/1128921301/",
         "image_link": "https://bsmedia.business-standard.com/_media/bs/img/article/2024-02/12/full/1707678091-5108.jpg?im=FitAndFill=(826,465)",
         "url": "Hiring-Freshers-For-ASSOCIATE-ANALYST"
-
     },
     {
         "companyname": "Cornerstone",
@@ -33,7 +62,6 @@
         "apply_link": "https://cornerstone.csod.com/ux/ats/careersite/2/home?c=cornerstone&sq=associate%20software%20engineer%20-%20ror&lang=en-US#/requisition/9706",
         "image_link": "https://www.shutterstock.com/image-photo/cornerstone-office-dublin-california-usa-600nw-2361715317.jpg",
         "url": "Hiring-Freshers-For-associate-software-engineer-ror"
-
     },
     {
         "companyname": "Wipro",
@@ -42,7 +70,6 @@
         "apply_link": "https://technicalcareers-wipro.icims.com/jobs/3114481/login?_sp=d1f699e4-15df-4b3d-817a-2038e36cf20c.1729260169078&_jsqid=undefined&iis=Social+Media&iisn=Linkedin&utm_source=Linkedin&_ga=2.250854406.1617513336.1729259346-1525352971.1701252196&_gl=1*9g6ft0*_ga*MTUyNTM1Mjk3MS4xNzAxMjUyMTk2*_ga_5Y2BYGL910*MTcyOTI1OTM0Ni4zLjEuMTcyOTI1OTcxMS42MC4wLjA.",
         "image_link": "https://www.enterpriseitworld.com/wp-content/uploads/2020/06/wipro.jpg",
         "url": "Hiring-Freshers-For-Developer-wipro"
-
     },
     {
         "companyname": "Encore",
@@ -51,7 +78,6 @@
         "apply_link": "https://recruiting2.ultipro.com/AUD1001AUDV/JobBoard/b1e2129f-5d09-48e8-b7ff-4e900458d8a9/OpportunityDetail?opportunityId=01c7b434-c557-4822-bcd7-077845ba6cf3&utm_campaign=General&utm_medium=job_posting&utm_content=social_media&utm_source=linkedin.com&utm_term=396106175&ss=paid&dclid=CNGX8PmOmIkDFbGNrAIdl8sYPg",
         "image_link": "https://tbcdn.talentbrew.com/company/6228/26720/content/encore_logo_rgb.svg",
         "url": "Hiring-Freshers-For-IT-Application-Development-Intern-Summer-2025"
-
     },
     {
         "companyname": "SLC Technologies",
@@ -60,9 +86,7 @@
         "apply_link": "https://www.linkedin.com/jobs/view/4053150442.",
         "image_link": "https://media.licdn.com/dms/image/v2/C4E0BAQFwY2ZeaRQ8VA/company-logo_200_200/company-logo_200_200/0/1630648512705/crezot_logo?e=1737590400&v=beta&t=b0W3LnN8DhnJFcp_kwutfy5-na_I4PCFh6dMJMgwNbY",
         "url": "Hiring-Freshers-For-Frontend-Developer"
-
     },
-
     {
         "companyname": "Mitsogo",
         "title": "Product Support Engineer",
@@ -70,7 +94,6 @@
         "apply_link": "https://forms.office.com/pages/responsepage.aspx?id=KqbnxBjPTUqTeDaRUh_kTkpZb4Wf4idCqyoir4p7sZ5UQlFTR0tEM1dCRVRKSjdYVE5YV0pMWkRJUy4u&route=shorturl",
         "image_link": "https://media.glassdoor.com/l/fb/32/a8/54/mitsogo-reception-wall.jpg",
         "url": "Hiring-Freshers-For-Product-Support-Engineer"
-
     },
     {
         "companyname": "Stripe",
@@ -79,7 +102,6 @@
         "apply_link": "https://stripe.com/jobs/listing/software-engineer-intern/6109583/apply?gh_src=73vnei",
         "image_link": "https://th.bing.com/th/id/OIP.xJ9kBm4ui7x7ZdRQLy8yrAHaE8?pid=ImgDet&w=474&h=316&rs=1",
         "url": "Hiring-Freshers-For-Software-Engineer-Intern"
-
     },
     {
         "companyname": "Wipro",
@@ -88,7 +110,6 @@
         "apply_link": "https://careers-wipro.icims.com/jobs/3111385/login?_jsqid=fea9dbfe-9b0b-4ccb-b99e-4c6c740e03a4&_sp=8f66a2e6-1c42-41c2-876f-ffc42f934bf9.1728280001877&_ga=2.10040498.649037331.1728279572-2118722387.1725185858&_gl=1*ag753p*_ga*MjExODcyMjM4Ny4xNzI1MTg1ODU4*_ga_5Y2BYGL910*MTcyODI3OTU3Mi4zLjEuMTcyODI3OTk4OS4zMy4wLjA.&mobile=false&width=1150&height=500&bga=true&needsRedirect=false&jan1offset=330&jun1offset=330",
         "image_link": "https://bl-i.thgim.com/public/incoming/y22soj/article66785980.ece/alternates/LANDSCAPE_1200/IMG_BL24_States_wipro_2_1_K9ATO970.jpg",
         "url": "Hiring-Freshers-For-Trainee/Manual-Testing"
-
     },
     {
         "companyname": "COGNIZANT",
@@ -97,7 +118,6 @@
         "apply_link": "https://app.joinsuperset.com/join/#/signup/student/jobprofiles/b643e525-c83b-4505-9a10-a666be44f249",
         "image_link": "https://static.toiimg.com/thumb/msid-112500237,width-1280,height-720,resizemode-4/112500237.jpg",
         "url": "Hiring-Freshers-For-MASS-HIRING-ENGINEER-TRAINEE"
-
     },
     {
         "companyname": "Capgemini",
@@ -106,7 +126,6 @@
         "apply_link": "https://app.joinsuperset.com/join/#/signup/student/jobprofiles/6e4f8e33-c0a0-4348-83af-66cd8aa8ff9e",
         "image_link": "https://sightsinplus.com/wp-content/uploads/2022/08/Capgemini-India-is-hiring-across-the-country-check-details-here.jpg",
         "url": "Hiring-Freshers-For-Software-Engineer"
-
     },
     {
         "companyname": "Simplotel Technologies",
@@ -115,7 +134,6 @@
         "apply_link": "https://app.joinsuperset.com/join/#/signup/student/jobprofiles/6e4f8e33-c0a0-4348-83af-66cd8aa8ff9e",
         "image_link": "https://ratetiger.com/wp-content/uploads/2021/07/simplotel-PR.jpg",
         "url": "Hiring-Freshers-For-Data-Automation-Analyst"
-
     },
     {
         "companyname": "Genpact",
@@ -124,11 +142,7 @@
         "apply_link": "https://genpact.taleo.net/careersection/sgy_external_career_section/jobdetail.ftl?job=ITO083797",
         "image_link": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTbaYaam0-ve4j-3cnccZ7akzMNwmGoF2e8NA&s",
         "url": "Hiring-Freshers-For-Technical-Associate"
-
     },
-   
-   
-   
     {
         "companyname": "Trimble",
         "title": "Customer Support",
@@ -136,7 +150,6 @@
         "apply_link": "https://careers.zebra.com/careers/job/343622504714?domain=zebra.com",
         "image_link": "https://bsmedia.business-standard.com/_media/bs/img/article/2022-03/30/full/20220330181036.jpg",
         "url": "Hiring-Freshers-For-Customer-Support"
-
     },
     {
         "companyname": "Cognizant",
@@ -145,7 +158,6 @@
         "apply_link": "https://cognizant.taleo.net/careersection/Lateral/jobapply.ftl?job=00060120911&lang=en&source=CWS-13082&src=CWS-13082",
         "image_link": "https://static.toiimg.com/thumb/msid-112500237,width-1280,height-720,resizemode-4/112500237.jpg",
         "url": "Hiring-Freshers-For-Associate - Projects"
-
     },
     {
         "companyname": "Razor Infotech",
@@ -154,7 +166,6 @@
         "apply_link": "https://unstop.com/competitions/1164238/register",
         "image_link": "https://d8it4huxumps7.cloudfront.net/uploads/images/150x150/66ed1954a4079_organisation_image-UuScTTlJli1498478550WQzm7rzD0E.png?d=200x200",
         "url": "Hiring-Freshers-For-Python-and-MERN-Stack-Developer"
-
     },
     {
         "companyname": "Intelliworkz",
@@ -163,7 +174,6 @@
         "apply_link": "https://unstop.com/competitions/1163414/register",
         "image_link": "https://images.yourstory.com/cs/images/companies/404e7f741540-925D6B6558F2414F8714EB3C0A2C5973-1660197102039.jpg?fm=auto&ar=1:1&mode=fill&fill=solid&fill-color=fff",
         "url": "Hiring-Freshers-For-Frontend-Developer"
-
     },
     {
         "companyname": "Amazon",
@@ -172,7 +182,6 @@
         "apply_link": "https://amazonvirtualhiring.hirepro.in/registration/incta/ju0f4/apply/?j=58164&e=14190",
         "image_link": "https://media.istockphoto.com/id/1317474419/photo/amazon.jpg?s=612x612&w=0&k=20&c=XfMWt3qTPFbhq_82ZejFTryb_v-HXRNOqxPizblgLj0=",
         "url": "Hiring-Freshers-For-associate"
-
     },
     {
         "companyname": "EY",
@@ -181,7 +190,6 @@
         "apply_link": "https://careers.ey.com/ey/job/Noida-Assurance-Associate-UP-201301/1120452901/",
         "image_link": "https://bsmedia.business-standard.com/_media/bs/img/article/2024-02/12/full/1707678091-5108.jpg?im=FitAndFill=(826,465)",
         "url": "Hiring-Freshers-For-Assurance-associate"
-
     },
     {
         "companyname": "KPMG",
@@ -190,7 +198,6 @@
         "apply_link": "https://unstop.com/o/QYKRL4I?utm_medium=Share&utm_source=shortUrl",
         "image_link": "https://i0.wp.com/opportunitycell.com/wp-content/uploads/2022/12/KPMG-London.png?fit=1000%2C667&ssl=1",
         "url": "Hiring-Freshers-For-QA-Engineer"
-
     },
     {
         "companyname": "GE",
@@ -199,7 +206,6 @@
         "apply_link": "https://jobs.gecareers.com/global/en/apply?jobSeqNo=GE11GLOBALR3780300EXTERNALENGLOBAL&step=1&stepname=personalInformation",
         "image_link": "https://job4software.com/wp-content/uploads/2024/09/gettyimages-868982314-scaled.webp",
         "url": "Hiring-Freshers-For-Software-Development-Engineer"
-
     },
     {
         "companyname": "Amazon",
@@ -208,7 +214,6 @@
         "apply_link": "https://www.amazon.jobs/en/jobs/2769644/device-associate",
         "image_link": "https://etimg.etb2bimg.com/photo/91892300.cms",
         "url": "Hiring-Freshers-For-Device-associate"
-
     },
     {
         "companyname": "Sutherland",
@@ -217,7 +222,6 @@
         "apply_link": "https://www.naukri.com/job-listings-hiring-freshers-experience-for-international-voice-process-hyderabad-sutherland-hyderabad-1-to-3-years-110924019859?utmcampaign=androidjd&utmsource=share&src=sharedjd",
         "image_link": "https://pbs.twimg.com/media/FNVOGCyacAAuQem.jpg",
         "url": "Hiring-Freshers-For-International-Voice-Process-Hyderabad"
-
     },
     {
         "companyname": "HCL",
@@ -226,7 +230,6 @@
         "apply_link": "https://www.naukri.com/job-listings/hcltech-walk-in-drive-email-chat-support-14th-15th-sep-hyderabad-hcltech-hyderabad-1-to-5-years-110924020680?utmcampaign=androidjd&utmsource=share&src=sharedjd",
         "image_link": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSt1VGT9Q_oR45MkKkJJTYd1vuxacMtSmZf1BLACRNwH38V6Okh1lc8Nh3vI1ZIa4jh9aU&usqp=CAU",
         "url": "Hiring-Freshers-For-Hiring-Email-Chat-Support"
-
     },
     {
         "companyname": "KPMG",
@@ -235,7 +238,6 @@
         "apply_link": "https://ejgk.fa.em2.oraclecloud.com/hcmUI/CandidateExperience/en/sites/CX_1/job/INTG10019786/apply/email",
         "image_link": "https://i0.wp.com/opportunitycell.com/wp-content/uploads/2022/12/KPMG-London.png?fit=1000%2C667&ssl=1",
         "url": "Hiring-Freshers-For-Hiring-Data-Engineer"
-
     },
     {
         "companyname": "Uber",
@@ -244,7 +246,6 @@
         "apply_link": "https://www.uber.com/careers/apply/interstitial/133571?uclick_id=e180fbe2-4219-4b03-bf9d-9358d3cddb84",
         "image_link": "https://img.etimg.com/thumb/width-1200,height-1200,imgsize-40032,resizemode-75,msid-105470730/tech/technology/uber-rolls-out-rewards-programme-uber-pro-for-drivers-in-12-cities.jpg",
         "url": "Hiring-Freshers-For-Hiring-Data-Engineer-II"
-
     },
     {
         "companyname": "Kreativstorm",
@@ -253,7 +254,6 @@
         "apply_link": "https://kreativstorm.zohorecruit.eu/jobs/Careers/69764000051925815",
         "image_link": "https://kreativstorm.zohorecruit.eu/recruit/viewCareerImage.do?page_id=69764000000401668&type=logo&file_name=256x256_transparent.png",
         "url": "Hiring-Freshers-For-Python-Developer-Intern"
-
     },
     {
         "companyname": "Splunk",
@@ -262,6 +262,5 @@
         "apply_link": "https://www.splunk.com/en_us/careers/jobs/technical-support-engineer-cloud-30829",
         "image_link": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQSBLLLkyDaLgoJoJQMyzuwPUsTt1sW5kTaow&s",
         "url": "Hiring-Freshers-For-Technical-Support-Engineer"
-
     }
 ]
