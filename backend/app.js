@@ -8,23 +8,15 @@ const helmet = require("helmet");
 const { body, validationResult } = require("express-validator");
 const rateLimit = require('express-rate-limit');
 const morgan = require('morgan');
-const mongoose = require("mongoose"); // For MongoDB
 const fs = require("fs").promises; // For reading files
 require("dotenv").config(); // Load environment variables
 
-// Utility to convert slug back to a normal name
-const convertSlugToName = (slug) => slug.replace(/-/g, ' ').toLowerCase();
 
-// Use the MONGODB_URI from the .env file
-const mongoURI = process.env.MONGODB_URI;
+
 const PORT = process.env.PORT || 3000;
 const databasePath = path.join(__dirname, process.env.DB_PATH || "jobs.db");
 
-// Check if required environment variables are set
-if (!mongoURI) {
-  console.error("MONGODB_URI is not set in the environment variables.");
-  process.exit(1);
-}
+
 
 // Initialize Express app
 const app = express();
@@ -45,13 +37,7 @@ app.use(limiter); // Apply rate limiting to all routes
 // Database connection variable
 let database = null;
 
-// MongoDB model for visitor tracking (example)
-const PageviewSchema = new mongoose.Schema({
-  ip: String,
-  views: { type: Number, default: 1 },
-});
 
-const Pageview = mongoose.model("Pageview", PageviewSchema);
 
 // Initialize database and server
 const initializeDbAndServer = async () => {
@@ -260,39 +246,14 @@ app.get('/api/jobs/company/:companyname/:url/:randomString?', async (req, res) =
 
 
 
-// Route to track visitor IPs and views
-app.get("/track-visitor", async (req, res) => {
-  const visitorIp = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
 
-  try {
-    let visitor = await Pageview.findOne({ ip: visitorIp });
-
-    if (!visitor) {
-      visitor = new Pageview({ ip: visitorIp, views: 1 });
-      await visitor.save();
-    } else {
-      visitor.views += 1;
-      await visitor.save();
-    }
-
-    const uniqueViewsCount = await Pageview.countDocuments();
-    res.json({ uniqueViews: uniqueViewsCount });
-  } catch (error) {
-    console.error("Error tracking visitor:", error);
-    res.status(500).json({ error: "Failed to track visitor" });
-  }
-});
 
 // Root route
 app.get("/", (req, res) => {
   res.send("Welcome to the Job Card Details API!");
 });
 
-// MongoDB connection (example)
-mongoose
-  .connect(mongoURI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log("MongoDB connected"))
-  .catch((err) => console.error("MongoDB connection error:", err));
+
 
 // Start the application
 initializeDbAndServer();
