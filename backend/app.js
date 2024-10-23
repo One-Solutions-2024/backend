@@ -232,26 +232,29 @@ app.post(
 );
 
 // Fetch job by company name and job URL
-app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
+app.get('/api/jobs/company/:companyname/:url/:randomString?', async (req, res) => { // Mark as async
   const { companyname, url } = req.params;
-  
+
+  // SQL query to fetch the job by company name and job URL (case-insensitive)
   const getJobByCompanyNameQuery = `
     SELECT * FROM job WHERE LOWER(companyname) = LOWER(?) AND LOWER(url) = LOWER(?);`; 
   // Ensure both company name and job URL match
 
   try {
+    // Await the database query execution
     const job = await database.get(getJobByCompanyNameQuery, [companyname, url]);
 
     if (job) {
-      res.json(job);
+      res.json(job);  // Return the job data if found
     } else {
-      res.status(404).json({ error: "Job not found" });
+      res.status(404).json({ error: "Job not found" });  // Return 404 if no job is found
     }
   } catch (error) {
     console.error(`Error fetching job by company name and URL: ${error.message}`);
-    res.status(500).json({ error: "Failed to fetch job" });
+    res.status(500).json({ error: "Failed to fetch job" });  // Return 500 for server error
   }
 });
+
 
 
 
