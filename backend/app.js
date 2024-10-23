@@ -195,7 +195,7 @@ app.post(
     body("description").notEmpty(),
     body("apply_link").isURL(),
     body("image_link").isURL(),
-    body("url").isURL(),
+    body("url").notEmpty(),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -218,7 +218,7 @@ app.post(
 );
 
 // Fetch job by company name and job URL
-app.get('/api/jobs/company/:companyname/:url/:randomString?', async (req, res) => { // Mark as async
+app.get('/api/jobs/company/:companyname/:url', async (req, res) => { // Mark as async
   const { companyname, url } = req.params;
 
   // SQL query to fetch the job by company name and job URL (case-insensitive)
