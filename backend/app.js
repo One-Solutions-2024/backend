@@ -52,6 +52,10 @@ const initializeDbAndServer = async () => {
         apply_link TEXT NOT NULL,
         image_link TEXT NOT NULL,
         url TEXT NOT NULL,
+          id SERIAL PRIMARY KEY,
+  setNewJobs INT NOT NULL,
+  setRegularJobs INT NOT NULL,
+
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -223,6 +227,29 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch job" });
   }
 });
+
+// Route to update job settings
+app.put("/api/jobs/settings", async (req, res) => {
+  const { setNewJobs, setRegularJobs } = req.body;
+
+  try {
+    // Update your settings in the job table
+    const updateSettingsQuery = `
+      UPDATE job
+      SET setNewJobs = $1, setRegularJobs = $2
+      WHERE isSettings = TRUE; // Target the row marked as settings
+    `;
+    
+    await pool.query(updateSettingsQuery, [setNewJobs, setRegularJobs]);
+
+    res.json({ message: "Job settings updated successfully!" });
+  } catch (error) {
+    console.error(`Error updating job settings: ${error.message}`);
+    res.status(500).json({ error: "Failed to update job settings" });
+  }
+});
+
+
 
 app.use((req, res, next) => {
   res.set('Cache-Control', 'no-store');
