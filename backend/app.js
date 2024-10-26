@@ -163,7 +163,7 @@ app.get("/api/jobs", async (req, res) => {
       ORDER BY isNew DESC, createdAt DESC 
       LIMIT $2 OFFSET $3;
     `;
-    
+
     const jobs = await pool.query(getAllJobsQuery, [sevenDaysAgo.toISOString(), limit, offset]);
 
     if (jobs.rows.length > 0) {
@@ -267,6 +267,42 @@ app.post(
     }
   }
 );
+
+// Fetch job by company name and job URL
+app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
+  const { companyname, url } = req.params;
+
+  const getJobByCompanyNameQuery = `
+    SELECT * FROM job WHERE LOWER(companyname) = LOWER($1) AND LOWER(url) = LOWER($2);
+  `;
+
+  try {
+    const job = await pool.query(getJobByCompanyNameQuery, [companyname, url]);
+
+    if (job.rows.length) {
+      res.json(job.rows[0]);
+    } else {
+      res.status(404).json({ error: "Job not found" });
+    }
+  } catch (error) {
+    console.error(`Error fetching job by company name and URL: ${error.message}`);
+    res.status(500).json({ error: "Failed to fetch job" });
+  }
+});
+
+app.use((req, res, next) => {
+  res.set('Cache-Control', 'no-store');
+  next();
+});
+
+// Root route
+app.get("/", (req, res) => {
+  res.send("Welcome to the Job Card Details API!");
+});
+
+pool.connect()
+  .then(() => console.log('Connected to PostgreSQL database'))
+  .catch((err) => console.error('Database connection error:', err.stack));
 
 // Root route
 app.get("/", (req, res) => {
