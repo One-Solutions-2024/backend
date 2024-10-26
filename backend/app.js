@@ -180,8 +180,6 @@ app.get("/api/jobs", async (req, res) => {
 // Admin Panel: Get all jobs (admin access only)
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
   // Date threshold to mark jobs as 'new' (e.g., jobs created in the last 7 days)
-  const dateThreshold = req.query.dateThreshold || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Default: 7 days ago
-
   const getAllJobsQuery = `
     SELECT *, 
       CASE 
