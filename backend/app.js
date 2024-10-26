@@ -179,22 +179,28 @@ app.get("/api/jobs", async (req, res) => {
 
 // Admin Panel: Get all jobs (admin access only)
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
-  const getAllJobsQuery = `SELECT *, 
+  // Date threshold to mark jobs as 'new' (e.g., jobs created in the last 7 days)
+  const dateThreshold = req.query.dateThreshold || new Date(Date.now() - 7 * 24 * 60 * 60 * 1000); // Default: 7 days ago
+
+  const getAllJobsQuery = `
+    SELECT *, 
       CASE 
         WHEN createdAt >= $1 THEN 1 
         ELSE 0 
       END as isNew 
-      FROM job 
-      ORDER BY isNew DESC, createdAt DESC;`;
+    FROM job 
+    ORDER BY isNew DESC, createdAt DESC;
+  `;
 
   try {
-    const jobsArray = await pool.query(getAllJobsQuery);
-    res.send(jobsArray.rows);
+    const jobsArray = await pool.query(getAllJobsQuery, [dateThreshold]);
+    res.status(200).json({ success: true, data: jobsArray.rows });
   } catch (error) {
     console.error("Error retrieving jobs:", error);
-    res.status(500).send("An error occurred while retrieving jobs.");
+    res.status(500).json({ success: false, message: "An error occurred while retrieving jobs." });
   }
 });
+
 
 // Route to update a job (admin access only)
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
