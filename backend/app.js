@@ -179,7 +179,13 @@ app.get("/api/jobs", async (req, res) => {
 
 // Admin Panel: Get all jobs (admin access only)
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
-  const getAllJobsQuery = `SELECT * FROM job;`;
+  const getAllJobsQuery = `SELECT *, 
+      CASE 
+        WHEN createdAt >= $1 THEN 1 
+        ELSE 0 
+      END as isNew 
+      FROM job 
+      ORDER BY isNew DESC, createdAt DESC;`;
 
   try {
     const jobsArray = await pool.query(getAllJobsQuery);
