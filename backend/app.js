@@ -1,30 +1,37 @@
-// Required modules
+
+// Import required modules
 const express = require("express");
 const { Pool } = require("pg");
 const cors = require("cors");
 const helmet = require("helmet");
+const { body, validationResult } = require("express-validator");
 const rateLimit = require("express-rate-limit");
 const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
-require("dotenv").config();
+require("dotenv").config(); // Load environment variables
 
-// Constants
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN";
+const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
+
+// Default admin credentials
 const DEFAULT_USERNAME = "Ekambaram";
 const DEFAULT_PASSWORD = "Ekam#95423";
 
-// Database setup
+// Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// Express setup
+// Initialize Express app
 const app = express();
+
+// Middleware
 app.use(express.json());
-app.use(helmet());
-app.use(morgan("combined"));
+app.use(cors());
+app.use(helmet()); // Basic security headers
+app.use(morgan("combined")); // Logging
+
 
 // Configure CORS for external access
 const corsOptions = {
@@ -32,12 +39,13 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-// Rate limiter
+
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: 100, // Limit each IP to 100 requests per windowMs
 });
-app.use(limiter);
+app.use(limiter); // Apply rate limiting to all routes
 
 // JWT Authentication
 const authenticateToken = (req, res, next) => {
@@ -57,7 +65,7 @@ const authorizeAdmin = (req, res, next) => {
   else res.status(403).send("Access denied: Admins only");
 };
 
-// Error handling middleware
+// Middleware for error handling
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: "Something went wrong!" });
@@ -75,6 +83,7 @@ app.post("/api/login", async (req, res) => {
     res.status(401).json({ error: "Invalid username or password" });
   }
 });
+
 
 // Initialize DB and start server
 const initializeDbAndServer = async () => {
@@ -94,18 +103,47 @@ const initializeDbAndServer = async () => {
       );
     `);
 
+     // Insert jobs if table is empty
+     const jobsCountResult = await pool.query("SELECT COUNT(*) as count FROM job;");
+     const jobsCount = jobsCountResult.rows[0].count;
+ 
+     if (jobsCount == 0) {
+       const data = await fs.readFile("jobs.json", "utf8");
+       const jobList = JSON.parse(data);
+ 
+       const insertJobQuery = `
+         INSERT INTO job (companyname, title, description, apply_link, image_link, url, setNewJobs, setRegularJobs)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+       `;
+ 
+       for (const job of jobList) {
+         await pool.query(insertJobQuery, [
+           job.companyname,
+           job.title,
+           job.description,
+           job.apply_link,
+           job.image_link,
+           job.url,
+           job.setNewJobs || 0,
+           job.setRegularJobs || 0,
+         ]);
+       }
+ 
+       console.log("Job data has been imported successfully.");
+     }
+ 
+ 
     // Start server on 0.0.0.0 for external access
-    app.listen(PORT, '0.0.0.0', () => {
-      console.log(`Server is running on http://0.0.0.0:${PORT}/`);
+    app.listen(PORT, () => {
+      console.log(`Server is running on http://localhost:${PORT}/`);
     });
+
 
   } catch (error) {
     console.error(`Error initializing the database: ${error.message}`);
     process.exit(1);
   }
 };
-
-
 // Route to get all jobs with pagination
 app.get("/api/jobs", async (req, res) => {
   const { page = 1, limit = 8 } = req.query;
