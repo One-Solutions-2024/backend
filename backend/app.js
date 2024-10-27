@@ -1,84 +1,74 @@
-// Import required modules
+// Required modules
 const express = require("express");
 const { Pool } = require("pg");
 const cors = require("cors");
 const helmet = require("helmet");
-const { body, validationResult } = require("express-validator");
 const rateLimit = require("express-rate-limit");
 const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
-require("dotenv").config(); // Load environment variables
+require("dotenv").config();
 
+// Constants
 const PORT = process.env.PORT || 3000;
-const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
-
-// Default admin credentials
+const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN";
 const DEFAULT_USERNAME = "Ekambaram";
 const DEFAULT_PASSWORD = "Ekam#95423";
 
-// Initialize PostgreSQL pool using environment variable
+// Database setup
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
 });
 
-// Initialize Express app
+// Express setup
 const app = express();
-
-// Middleware
 app.use(express.json());
-app.use(cors());
-app.use(helmet()); // Basic security headers
-app.use(morgan("combined")); // Logging
+app.use(helmet());
+app.use(morgan("combined"));
 
-// Rate limiting
+// Configure CORS for external access
+const corsOptions = {
+  origin: "*", // Replace "*" with specific domains for production
+};
+app.use(cors(corsOptions));
+
+// Rate limiter
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
 });
-app.use(limiter); // Apply rate limiting to all routes
+app.use(limiter);
 
-// JWT Authentication Middleware
+// JWT Authentication
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).send("Unauthorized: No token provided");
-  }
-
+  if (!token) return res.status(401).send("Unauthorized: No token provided");
   jwt.verify(token, JWT_SECRET, (error, user) => {
-    if (error) {
-      return res.status(403).send("Unauthorized: Invalid token");
-    }
-    req.user = user; // Store the user information in request object
+    if (error) return res.status(403).send("Unauthorized: Invalid token");
+    req.user = user;
     next();
   });
 };
 
-// Admin Authorization Middleware
+// Admin Authorization
 const authorizeAdmin = (req, res, next) => {
-  if (req.user && req.user.role === "admin") {
-    next();
-  } else {
-    res.status(403).send("Access denied: Admins only");
-  }
+  if (req.user && req.user.role === "admin") next();
+  else res.status(403).send("Access denied: Admins only");
 };
 
-// Middleware for error handling
+// Error handling middleware
 app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: "Something went wrong!" });
 });
 
-// Login Route
+// Login route
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
-
-  // Validate username and password
   if (username === DEFAULT_USERNAME && password === DEFAULT_PASSWORD) {
     const token = jwt.sign({ username, role: "admin" }, JWT_SECRET, {
-      expiresIn: "1h", // Token expires in 1 hour
+      expiresIn: "1h",
     });
     res.json({ message: "Login successful", token });
   } else {
@@ -86,10 +76,9 @@ app.post("/api/login", async (req, res) => {
   }
 });
 
-// Initialize the database and server
+// Initialize DB and start server
 const initializeDbAndServer = async () => {
   try {
-    // Create the job table if it doesn't exist
     await pool.query(`
       CREATE TABLE IF NOT EXISTS job (
         id SERIAL PRIMARY KEY,
@@ -105,44 +94,17 @@ const initializeDbAndServer = async () => {
       );
     `);
 
-    // Insert jobs if table is empty
-    const jobsCountResult = await pool.query("SELECT COUNT(*) as count FROM job;");
-    const jobsCount = jobsCountResult.rows[0].count;
-
-    if (jobsCount == 0) {
-      const data = await fs.readFile("jobs.json", "utf8");
-      const jobList = JSON.parse(data);
-
-      const insertJobQuery = `
-        INSERT INTO job (companyname, title, description, apply_link, image_link, url, setNewJobs, setRegularJobs)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
-      `;
-
-      for (const job of jobList) {
-        await pool.query(insertJobQuery, [
-          job.companyname,
-          job.title,
-          job.description,
-          job.apply_link,
-          job.image_link,
-          job.url,
-          job.setNewJobs || 0,
-          job.setRegularJobs || 0,
-        ]);
-      }
-
-      console.log("Job data has been imported successfully.");
-    }
-
-    app.listen(PORT, () => {
-      console.log(`Server is running on http://localhost:${PORT}/`);
+    // Start server on 0.0.0.0 for external access
+    app.listen(PORT, '0.0.0.0', () => {
+      console.log(`Server is running on http://0.0.0.0:${PORT}/`);
     });
 
   } catch (error) {
     console.error(`Error initializing the database: ${error.message}`);
-    process.exit(1); // Exit the process with an error code
+    process.exit(1);
   }
 };
+
 
 // Route to get all jobs with pagination
 app.get("/api/jobs", async (req, res) => {
