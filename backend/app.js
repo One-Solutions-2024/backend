@@ -337,7 +337,7 @@ app.post("/api/popup/create", authenticateToken, authorizeAdmin, async (req, res
   try {
     const upsertPopupQuery = `
       INSERT INTO popup_content (popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext)
-      VALUES ($1, $2, $3, $4)
+      VALUES ($1, $2, $3, $4, $5)
       ON CONFLICT (id) DO UPDATE
       SET popup_heading = EXCLUDED.popup_heading,
           popup_text = EXCLUDED.popup_text,
