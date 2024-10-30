@@ -97,8 +97,12 @@ const initializeDbAndServer = async () => {
         apply_link TEXT NOT NULL,
         image_link TEXT NOT NULL,
         url TEXT NOT NULL,
-        setNewJobs INT NOT NULL,
-        setRegularJobs INT NOT NULL,
+        salary TEXT NOT NULL,
+        location TEXT NOT NULL,
+        job_type TEXT NOT NULL,
+        experience TEXT NOT NULL,
+        batch TEXT NOT NULL,
+        popup_link TEXT NOT NULL,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -112,8 +116,8 @@ const initializeDbAndServer = async () => {
        const jobList = JSON.parse(data);
  
        const insertJobQuery = `
-         INSERT INTO job (companyname, title, description, apply_link, image_link, url, setNewJobs, setRegularJobs)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8);
+         INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
        `;
  
        for (const job of jobList) {
@@ -124,8 +128,12 @@ const initializeDbAndServer = async () => {
            job.apply_link,
            job.image_link,
            job.url,
-           job.setNewJobs || 0,
-           job.setRegularJobs || 0,
+           job.salary,
+           job.location,
+           job.job_type,
+           job.experience,
+           job.batch,
+           job.popup_link,
          ]);
        }
  
@@ -194,7 +202,7 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
 // Route to update a job (admin access only)
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
-  const { companyname, title, description, apply_link, image_link, url } = req.body;
+  const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link } = req.body;
 
   try {
     const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
@@ -205,10 +213,10 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
 
     const updateJobQuery = `
       UPDATE job
-      SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6
-      WHERE id = $7;
+      SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, popup_link = $12
+      WHERE id = $13;
     `;
-    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, id]);
+    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link, id]);
     res.json({ message: "Job updated successfully" });
   } catch (error) {
     console.error(`Error updating job: ${error.message}`);
@@ -248,19 +256,25 @@ app.post(
     body("apply_link").isURL(),
     body("image_link").isURL(),
     body("url").notEmpty(),
+    body("salary").notEmpty(),
+    body("location").notEmpty(),
+    body("job_type").notEmpty(),
+    body("experience").notEmpty(),
+    body("batch").notEmpty(),
+    body("popup_link").isURL(),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { companyname, title, description, apply_link, image_link, url } = req.body;
+    const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link } = req.body;
 
     try {
       const insertJobQuery = `
-        INSERT INTO job (companyname, title, description, apply_link, image_link, url)
-        VALUES ($1, $2, $3, $4, $5, $6);
+        INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
       `;
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url]);
+      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link]);
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error(`Error adding job: ${error.message}`);
