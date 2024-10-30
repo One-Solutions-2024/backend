@@ -331,28 +331,29 @@ app.get("/api/popup", async (req, res) => {
   }
 });
 
-// Create or update popup content
+// Check that this line is correctly added and the route is available in your server code
 app.post("/api/popup/create", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext } = req.body; // Updated field names
+  const { popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext } = req.body;
   try {
-    const upsertPopupQuery = `
-      INSERT INTO popup_content (popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext)
-      VALUES ($1, $2, $3, $4, $5)
-      ON CONFLICT (id) DO UPDATE
-      SET popup_heading = EXCLUDED.popup_heading,
-          popup_text = EXCLUDED.popup_text,
-          popup_Image_link = EXCLUDED.popup_Image_link,
-          popup_routing_link = EXCLUDED.popup_routing_link,
-          popup_belowtext = EXCLUDED.popup_belowtext
-      RETURNING *;
-    `;
-    const newPopup = await pool.query(upsertPopupQuery, [popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext]);
-    res.status(201).json({ message: "Popup content created/updated", popup: newPopup.rows[0] });
+      const upsertPopupQuery = `
+        INSERT INTO popup_content (popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext)
+        VALUES ($1, $2, $3, $4, $5)
+        ON CONFLICT (id) DO UPDATE
+        SET popup_heading = EXCLUDED.popup_heading,
+            popup_text = EXCLUDED.popup_text,
+            popup_Image_link = EXCLUDED.popup_Image_link,
+            popup_routing_link = EXCLUDED.popup_routing_link,
+            popup_belowtext = EXCLUDED.popup_belowtext
+        RETURNING *;
+      `;
+      const newPopup = await pool.query(upsertPopupQuery, [popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext]);
+      res.status(201).json({ message: "Popup content created/updated", popup: newPopup.rows[0] });
   } catch (error) {
-    console.error(`Error creating/updating popup content: ${error.message}`);
-    res.status(500).json({ error: "Failed to create/update popup content" });
+      console.error(`Error creating/updating popup content: ${error.message}`);
+      res.status(500).json({ error: "Failed to create/update popup content" });
   }
 });
+
 
 // Delete popup content
 app.delete("/api/popup", authenticateToken, authorizeAdmin, async (req, res) => {
