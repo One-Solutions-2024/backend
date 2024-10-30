@@ -365,6 +365,66 @@ app.delete("/api/popup", authenticateToken, authorizeAdmin, async (req, res) => 
   }
 });
 
+// Admin Panel: Get all popup content
+app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC;");
+    res.json(popupResult.rows);
+  } catch (error) {
+    console.error(`Error fetching all popup content: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve popup content" });
+  }
+});
+
+// Admin Panel: Update specific popup content
+app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext } = req.body;
+
+  try {
+    const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id]);
+
+    if (!existingPopup.rows.length) {
+      return res.status(404).json({ error: "Popup not found" });
+    }
+
+    const updatePopupQuery = `
+      UPDATE popup_content
+      SET popup_heading = $1,
+          popup_text = $2,
+          popup_Image_link = $3,
+          popup_routing_link = $4,
+          popup_belowtext = $5
+      WHERE id = $6;
+    `;
+    await pool.query(updatePopupQuery, [popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext, id]);
+    res.json({ message: "Popup content updated successfully" });
+  } catch (error) {
+    console.error(`Error updating popup content: ${error.message}`);
+    res.status(500).json({ error: "Failed to update popup content" });
+  }
+});
+
+// Admin Panel: Delete specific popup content by ID
+app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id]);
+
+    if (!existingPopup.rows.length) {
+      return res.status(404).json({ error: "Popup not found" });
+    }
+
+    const deletePopupQuery = `DELETE FROM popup_content WHERE id = $1;`;
+    await pool.query(deletePopupQuery, [id]);
+    res.json({ message: "Popup content deleted successfully" });
+  } catch (error) {
+    console.error(`Error deleting popup content: ${error.message}`);
+    res.status(500).json({ error: "Failed to delete popup content" });
+  }
+});
+
 
 
 app.use((req, res, next) => {
