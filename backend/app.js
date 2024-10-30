@@ -20,7 +20,7 @@ const DEFAULT_PASSWORD = "Ekam#95423";
 
 // Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+  connectionString: "postgres://yourusername:ekam83285@localhost:5432/jobdatabase",
 });
 
 // Initialize Express app
