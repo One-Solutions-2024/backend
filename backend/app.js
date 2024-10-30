@@ -111,7 +111,7 @@ const initializeDbAndServer = async () => {
         id SERIAL PRIMARY KEY,
         popup_heading TEXT NOT NULL,
         popup_text TEXT NOT NULL,
-        popup_Image_link TEXT NOT NULL,
+        popup_image_link TEXT NOT NULL,
         popup_belowtext TEXT NOT NULL,
         popup_routing_link TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -332,19 +332,20 @@ app.get("/api/popup", async (req, res) => {
 });
 
 app.post('/api/popup/add-dummy', async (req, res) => {
-  const { popup_heading, popup_text, popup_Image_link, popup_belowtext, popup_routing_link } = req.body;
+  const { popup_heading, popup_text, popup_image_link, popup_belowtext, popup_routing_link } = req.body;
 
   try {
       const result = await pool.query(
-          `INSERT INTO popup_content (popup_heading, popup_text, popup_Image_link, popup_belowtext, popup_routing_link) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-          [popup_heading, popup_text, popup_Image_link, popup_belowtext, popup_routing_link]
+          `INSERT INTO popup_content (popup_heading, popup_text, popup_image_link, popup_belowtext, popup_routing_link) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+          [popup_heading, popup_text, popup_image_link, popup_belowtext, popup_routing_link]
       );
       res.status(201).json(result.rows[0]);
   } catch (error) {
-      console.error('Error adding popup content:', error);
+      console.error('Error adding popup content:', error.message, error.stack);
       res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 
 
@@ -374,7 +375,7 @@ app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, 
 // Admin Panel: Update specific popup content
 app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
-  const { popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext } = req.body;
+  const { popup_heading, popup_text, popup_image_link, popup_routing_link, popup_belowtext } = req.body;
 
   try {
     const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id]);
@@ -387,12 +388,12 @@ app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (r
       UPDATE popup_content
       SET popup_heading = $1,
           popup_text = $2,
-          popup_Image_link = $3,
+          popup_image_link = $3,
           popup_routing_link = $4,
           popup_belowtext = $5
       WHERE id = $6;
     `;
-    await pool.query(updatePopupQuery, [popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext, id]);
+    await pool.query(updatePopupQuery, [popup_heading, popup_text, popup_image_link, popup_routing_link, popup_belowtext, id]);
     res.json({ message: "Popup content updated successfully" });
   } catch (error) {
     console.error(`Error updating popup content: ${error.message}`);
