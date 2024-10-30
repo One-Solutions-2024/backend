@@ -65,11 +65,9 @@ const authorizeAdmin = (req, res, next) => {
   else res.status(403).send("Access denied: Admins only");
 };
 
-// Middleware for error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: "Something went wrong!" });
-});
+
+
+
 
 // Login route
 app.post("/api/login", async (req, res) => {
@@ -102,8 +100,19 @@ const initializeDbAndServer = async () => {
         job_type TEXT NOT NULL,
         experience TEXT NOT NULL,
         batch TEXT NOT NULL,
-        popup_link TEXT NOT NULL,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+
+    // Create popup_content table
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS popup_content (
+        id SERIAL PRIMARY KEY,
+        popup_heading TEXT NOT NULL,
+        popup_text TEXT NOT NULL,
+        popup_link TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
@@ -116,8 +125,8 @@ const initializeDbAndServer = async () => {
        const jobList = JSON.parse(data);
  
        const insertJobQuery = `
-         INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+         INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
        `;
  
        for (const job of jobList) {
@@ -133,7 +142,6 @@ const initializeDbAndServer = async () => {
            job.job_type,
            job.experience,
            job.batch,
-           job.popup_link,
          ]);
        }
  
@@ -202,7 +210,7 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
 // Route to update a job (admin access only)
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
-  const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link } = req.body;
+  const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch} = req.body;
 
   try {
     const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
@@ -213,10 +221,10 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
 
     const updateJobQuery = `
       UPDATE job
-      SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, popup_link = $12
-      WHERE id = $13;
+      SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11
+      WHERE id = $12;
     `;
-    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link, id]);
+    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch,  id]);
     res.json({ message: "Job updated successfully" });
   } catch (error) {
     console.error(`Error updating job: ${error.message}`);
@@ -261,20 +269,19 @@ app.post(
     body("job_type").notEmpty(),
     body("experience").notEmpty(),
     body("batch").notEmpty(),
-    body("popup_link").isURL(),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link } = req.body;
+    const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch } = req.body;
 
     try {
       const insertJobQuery = `
-        INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+        INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
       `;
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, popup_link]);
+      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch]);
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error(`Error adding job: ${error.message}`);
@@ -305,15 +312,62 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
   }
 });
 
+
+// Fetch the latest popup content
+app.get("/api/popup", async (req, res) => {
+  try {
+    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;");
+    const popup = popupResult.rows[0];
+    if (popup) {
+      res.json({ popup });
+    } else {
+      res.json({ popup: null });
+    }
+  } catch (error) {
+    console.error(`Error fetching popup content: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve popup content" });
+  }
+});
+
+// Create or update popup content
+app.post("/api/popup", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { popup_heading, popup_text, popup_link } = req.body; // Updated field names
+  try {
+    const upsertPopupQuery = `
+      INSERT INTO popup_content (popup_heading, popup_text, popup_link)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (id) DO UPDATE
+      SET popup_heading = EXCLUDED.popup_heading,
+          popup_text = EXCLUDED.popup_text,
+          popup_link = EXCLUDED.popup_link
+      RETURNING *;
+    `;
+    const newPopup = await pool.query(upsertPopupQuery, [popup_heading, popup_text, popup_link]);
+    res.status(201).json({ message: "Popup content created/updated", popup: newPopup.rows[0] });
+  } catch (error) {
+    console.error(`Error creating/updating popup content: ${error.message}`);
+    res.status(500).json({ error: "Failed to create/update popup content" });
+  }
+});
+
+// Delete popup content
+app.delete("/api/popup", authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    await pool.query("DELETE FROM popup_content;");
+    res.json({ message: "Popup content deleted successfully" });
+  } catch (error) {
+    console.error(`Error deleting popup content: ${error.message}`);
+    res.status(500).json({ error: "Failed to delete popup content" });
+  }
+});
+
+
+
 app.use((req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
 
-// Root route
-app.get("/", (req, res) => {
-  res.send("Welcome to the Job Card Details API!");
-});
 
 pool.connect()
   .then(() => console.log('Connected to PostgreSQL database'))
@@ -322,6 +376,12 @@ pool.connect()
 // Root route
 app.get("/", (req, res) => {
   res.send("Welcome to the Job Card Details API!");
+});
+
+// Middleware for error handling
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: "Something went wrong!" });
 });
 
 // Connect to the database and start the server
