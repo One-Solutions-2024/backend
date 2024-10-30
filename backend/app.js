@@ -105,52 +105,86 @@ const initializeDbAndServer = async () => {
     `);
 
 
-    // Create popup_content table
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS popup_content (
-        id SERIAL PRIMARY KEY,
-        popup_heading TEXT NOT NULL,
-        popup_text TEXT NOT NULL,
-        popup_image_link TEXT NOT NULL,
-        popup_belowtext TEXT NOT NULL,
-        popup_routing_link TEXT NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+          // Create popup_content table
+          await pool.query(`
+            CREATE TABLE IF NOT EXISTS popup_content (
+          id SERIAL PRIMARY KEY,
+          popup_heading TEXT NOT NULL,
+          popup_text TEXT NOT NULL,
+          popup_link TEXT NOT NULL,
+          popup_belowtext TEXT NOT NULL,
+          popup_routing_link TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-     // Insert jobs if table is empty
-     const jobsCountResult = await pool.query("SELECT COUNT(*) as count FROM job;");
-     const jobsCount = jobsCountResult.rows[0].count;
- 
-     if (jobsCount == 0) {
-       const data = await fs.readFile("jobs.json", "utf8");
-       const jobList = JSON.parse(data);
- 
-       const insertJobQuery = `
+    const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
+    const popupCount = popUpCountResult.rows[0].count;
+
+    if (popupCount == 0) {
+      try {
+        const data = await fs.readFile("pops.json", "utf8");
+        const popList = JSON.parse(data); // popList should be an array
+    
+        if (!Array.isArray(popList)) {
+          throw new Error("pops.json content is not an array");
+        }
+    
+        const insertPopQuery = `
+          INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link)
+          VALUES ($1, $2, $3, $4, $5);
+        `;
+    
+        for (const popup_content of popList) {
+          await pool.query(insertPopQuery, [
+            popup_content.popup_heading,
+            popup_content.popup_text,
+            popup_content.popup_link,
+            popup_content.popup_belowtext,
+            popup_content.popup_routing_link,
+          ]);
+        }
+        console.log("Pop Data Imported Successfully");
+      } catch (error) {
+        console.error("Error reading or processing pops.json:", error.message);
+        throw error; // rethrow the error to prevent the server from starting
+      }
+    }
+    
+
+    // Insert jobs if table is empty
+    const jobsCountResult = await pool.query("SELECT COUNT(*) as count FROM job;");
+    const jobsCount = jobsCountResult.rows[0].count;
+
+    if (jobsCount == 0) {
+      const data = await fs.readFile("jobs.json", "utf8");
+      const jobList = JSON.parse(data);
+
+      const insertJobQuery = `
          INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
        `;
- 
-       for (const job of jobList) {
-         await pool.query(insertJobQuery, [
-           job.companyname,
-           job.title,
-           job.description,
-           job.apply_link,
-           job.image_link,
-           job.url,
-           job.salary,
-           job.location,
-           job.job_type,
-           job.experience,
-           job.batch,
-         ]);
-       }
- 
-       console.log("Job data has been imported successfully.");
-     }
- 
- 
+
+      for (const job of jobList) {
+        await pool.query(insertJobQuery, [
+          job.companyname,
+          job.title,
+          job.description,
+          job.apply_link,
+          job.image_link,
+          job.url,
+          job.salary,
+          job.location,
+          job.job_type,
+          job.experience,
+          job.batch,
+        ]);
+      }
+
+      console.log("Job data has been imported successfully.");
+    }
+
+
     // Start server on 0.0.0.0 for external access
     app.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
@@ -212,7 +246,7 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
 // Route to update a job (admin access only)
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
-  const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch} = req.body;
+  const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch } = req.body;
 
   try {
     const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
@@ -226,7 +260,7 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
       SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11
       WHERE id = $12;
     `;
-    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch,  id]);
+    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, id]);
     res.json({ message: "Job updated successfully" });
   } catch (error) {
     console.error(`Error updating job: ${error.message}`);
@@ -332,17 +366,17 @@ app.get("/api/popup", async (req, res) => {
 });
 
 app.post('/api/popup/add-dummy', async (req, res) => {
-  const { popup_heading, popup_text, popup_image_link, popup_belowtext, popup_routing_link } = req.body;
+  const { popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link } = req.body;
 
   try {
-      const result = await pool.query(
-          `INSERT INTO popup_content (popup_heading, popup_text, popup_image_link, popup_belowtext, popup_routing_link) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-          [popup_heading, popup_text, popup_image_link, popup_belowtext, popup_routing_link]
-      );
-      res.status(201).json(result.rows[0]);
+    const result = await pool.query(
+      `INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+      [popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link]
+    );
+    res.status(201).json(result.rows[0]);
   } catch (error) {
-      console.error('Error adding popup content:', error.message, error.stack);
-      res.status(500).json({ error: 'Internal Server Error' });
+    console.error('Error adding popup content:', error.message, error.stack);
+    res.status(500).json({ error: 'Internal Server Error' });
   }
 });
 
@@ -375,7 +409,7 @@ app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, 
 // Admin Panel: Update specific popup content
 app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
-  const { popup_heading, popup_text, popup_image_link, popup_routing_link, popup_belowtext } = req.body;
+  const { popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext } = req.body;
 
   try {
     const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id]);
@@ -388,12 +422,12 @@ app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (r
       UPDATE popup_content
       SET popup_heading = $1,
           popup_text = $2,
-          popup_image_link = $3,
+          popup_link = $3,
           popup_routing_link = $4,
           popup_belowtext = $5
       WHERE id = $6;
     `;
-    await pool.query(updatePopupQuery, [popup_heading, popup_text, popup_image_link, popup_routing_link, popup_belowtext, id]);
+    await pool.query(updatePopupQuery, [popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext, id]);
     res.json({ message: "Popup content updated successfully" });
   } catch (error) {
     console.error(`Error updating popup content: ${error.message}`);
