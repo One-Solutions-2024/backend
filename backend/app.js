@@ -365,35 +365,6 @@ app.get("/api/popup", async (req, res) => {
   }
 });
 
-app.post('/api/popup/add-dummy', async (req, res) => {
-  const { popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link } = req.body;
-
-  try {
-    const result = await pool.query(
-      `INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
-      [popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link]
-    );
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error('Error adding popup content:', error.message, error.stack);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-
-
-
-
-// Delete popup content
-app.delete("/api/popup", authenticateToken, authorizeAdmin, async (req, res) => {
-  try {
-    await pool.query("DELETE FROM popup_content;");
-    res.json({ message: "Popup content deleted successfully" });
-  } catch (error) {
-    console.error(`Error deleting popup content: ${error.message}`);
-    res.status(500).json({ error: "Failed to delete popup content" });
-  }
-});
 
 // Admin Panel: Get all popup content
 app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
