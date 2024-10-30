@@ -112,6 +112,7 @@ const initializeDbAndServer = async () => {
         popup_heading TEXT NOT NULL,
         popup_text TEXT NOT NULL,
         popup_link TEXT NOT NULL,
+        popup_belowtext TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -331,18 +332,19 @@ app.get("/api/popup", async (req, res) => {
 
 // Create or update popup content
 app.post("/api/popup", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { popup_heading, popup_text, popup_link } = req.body; // Updated field names
+  const { popup_heading, popup_text, popup_link, popup_belowtext } = req.body; // Updated field names
   try {
     const upsertPopupQuery = `
-      INSERT INTO popup_content (popup_heading, popup_text, popup_link)
-      VALUES ($1, $2, $3)
+      INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext)
+      VALUES ($1, $2, $3, $4)
       ON CONFLICT (id) DO UPDATE
       SET popup_heading = EXCLUDED.popup_heading,
           popup_text = EXCLUDED.popup_text,
-          popup_link = EXCLUDED.popup_link
+          popup_link = EXCLUDED.popup_link,
+          popup_belowtext = EXCLUDED.popup_belowtext
       RETURNING *;
     `;
-    const newPopup = await pool.query(upsertPopupQuery, [popup_heading, popup_text, popup_link]);
+    const newPopup = await pool.query(upsertPopupQuery, [popup_heading, popup_text, popup_link, popup_belowtext]);
     res.status(201).json({ message: "Popup content created/updated", popup: newPopup.rows[0] });
   } catch (error) {
     console.error(`Error creating/updating popup content: ${error.message}`);
