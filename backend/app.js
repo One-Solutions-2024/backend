@@ -331,30 +331,21 @@ app.get("/api/popup", async (req, res) => {
   }
 });
 
-// Route to insert dummy data into popup_content table
-app.post("/api/popup/add-dummy", async (req, res) => {
+app.post('/api/popup/add-dummy', async (req, res) => {
+  const { popup_heading, popup_text, popup_Image_link, popup_belowtext, popup_routing_link } = req.body;
+
   try {
-      const insertQuery = `
-          INSERT INTO popup_content (popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext)
-          VALUES ($1, $2, $3, $4, $5)
-          RETURNING *;
-      `;
-      
-      const values = [
-          "Welcome to Our Site!",                // popup_heading
-          "This is a sample popup text.",       // popup_text
-          "https://fps.cdnpk.net/images/home/subhome-ai.webp?w=649&h=649", // popup_Image_link
-          "https://youtu.be/NaxafQ_ly58?si=szCudDChIusH-jPp",                  // popup_routing_link
-          "Thank you for visiting!"             // popup_belowtext
-      ];
-      
-      const result = await pool.query(insertQuery, values);
-      res.status(201).json({ message: "Dummy popup content added", popup: result.rows[0] });
+      const result = await pool.query(
+          `INSERT INTO popup_content (popup_heading, popup_text, popup_Image_link, popup_belowtext, popup_routing_link) VALUES ($1, $2, $3, $4, $5) RETURNING *`,
+          [popup_heading, popup_text, popup_Image_link, popup_belowtext, popup_routing_link]
+      );
+      res.status(201).json(result.rows[0]);
   } catch (error) {
-      console.error(`Error adding dummy popup content: ${error.message}`);
-      res.status(500).json({ error: "Failed to add dummy popup content" });
+      console.error('Error adding popup content:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+
 
 
 
