@@ -332,7 +332,7 @@ app.get("/api/popup", async (req, res) => {
 });
 
 // Create or update popup content
-app.post("/api/popup", authenticateToken, authorizeAdmin, async (req, res) => {
+app.post("/api/popup/create", authenticateToken, authorizeAdmin, async (req, res) => {
   const { popup_heading, popup_text, popup_Image_link, popup_routing_link, popup_belowtext } = req.body; // Updated field names
   try {
     const upsertPopupQuery = `
