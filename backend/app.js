@@ -347,14 +347,16 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch job" });
   }
 });
-
-
-// Fetch all popup content
+// Fetch the latest popup content
 app.get("/api/popup", async (req, res) => {
   try {
     const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;");
-    const popups = popupResult.rows[0]; // Return all rows, not just the first one
-    res.json({ popups }); // Send all popup entries as an array
+    const popup = popupResult.rows[0];
+    if (popup) {
+      res.json({ popup });
+    } else {
+      res.json({ popup: null });
+    }
   } catch (error) {
     console.error(`Error fetching popup content: ${error.message}`);
     res.status(500).json({ error: "Failed to retrieve popup content" });
