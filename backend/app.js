@@ -352,8 +352,8 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
 // Fetch all popup content
 app.get("/api/popup", async (req, res) => {
   try {
-    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC;");
-    const popups = popupResult.rows; // Return all rows, not just the first one
+    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;");
+    const popups = popupResult.rows[0]; // Return all rows, not just the first one
     res.json({ popups }); // Send all popup entries as an array
   } catch (error) {
     console.error(`Error fetching popup content: ${error.message}`);
