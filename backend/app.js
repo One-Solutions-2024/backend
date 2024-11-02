@@ -105,8 +105,8 @@ const initializeDbAndServer = async () => {
     `);
 
 
-          // Create popup_content table
-          await pool.query(`
+    // Create popup_content table
+    await pool.query(`
             CREATE TABLE IF NOT EXISTS popup_content (
           id SERIAL PRIMARY KEY,
           popup_heading TEXT NOT NULL,
@@ -125,16 +125,16 @@ const initializeDbAndServer = async () => {
       try {
         const data = await fs.readFile("pops.json", "utf8");
         const popList = JSON.parse(data); // popList should be an array
-    
+
         if (!Array.isArray(popList)) {
           throw new Error("pops.json content is not an array");
         }
-    
+
         const insertPopQuery = `
           INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link)
           VALUES ($1, $2, $3, $4, $5);
         `;
-    
+
         for (const popup_content of popList) {
           await pool.query(insertPopQuery, [
             popup_content.popup_heading,
@@ -150,7 +150,7 @@ const initializeDbAndServer = async () => {
         throw error; // rethrow the error to prevent the server from starting
       }
     }
-    
+
 
     // Insert jobs if table is empty
     const jobsCountResult = await pool.query("SELECT COUNT(*) as count FROM job;");
@@ -377,6 +377,33 @@ app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, 
   }
 });
 
+app.post(
+  "/api/popup/adminpanel",
+  authenticateToken, authorizeAdmin,
+  [
+    body("popup_heading").notEmpty(),
+    body("popup_text").notEmpty(),
+    body("popup_link").isURL(),
+    body("popup_routing_link").isURL(),
+    body("popup_belowtext").notEmpty(),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const { popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext } = req.body;
+    try {
+      const insertPopQuery = `
+      INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link)
+      VALUES ($1, $2, $3, $4, $5);
+    `; await pool.query(insertPopQuery, [popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link]);
+      res.status(201).json({ message: "Pop added successfully" });
+    } catch (error) {
+      console.error(`Error adding Pop: ${error.message}`);
+      res.status(500).json({ error: "Failed to add Pop" });
+    }
+
+  }
+)
 // Admin Panel: Update specific popup content
 app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
