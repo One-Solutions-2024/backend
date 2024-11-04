@@ -318,7 +318,7 @@ app.post(
     try {
       const insertJobQuery = `
         INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11);
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
       `;
       await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader]);
       res.status(201).json({ message: "Job added successfully" });
