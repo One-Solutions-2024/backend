@@ -105,6 +105,13 @@ const initializeDbAndServer = async () => {
       );
     `);
 
+    // Check if the column exists, and add it if it doesn't
+    await pool.query(`
+      ALTER TABLE job 
+      ADD COLUMN IF NOT EXISTS job_uploader TEXT NOT NULL DEFAULT 'Unknown';
+    `);
+
+
 
     // Create popup_content table
     await pool.query(`
