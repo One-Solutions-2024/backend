@@ -108,8 +108,12 @@ const initializeDbAndServer = async () => {
     // Check if the column exists, and add it if it doesn't
     await pool.query(`
       ALTER TABLE job 
-      ADD COLUMN IF NOT EXISTS job_uploader TEXT NOT NULL DEFAULT 'Unknown';
-    `);
+      ADD COLUMN IF NOT EXISTS salary TEXT DEFAULT 'Unknown' NOT NULL,
+      ADD COLUMN IF NOT EXISTS location TEXT DEFAULT 'Unknown' NOT NULL,
+      ADD COLUMN IF NOT EXISTS job_type TEXT DEFAULT 'Unknown' NOT NULL,
+      ADD COLUMN IF NOT EXISTS experience TEXT DEFAULT 'Unknown' NOT NULL,
+      ADD COLUMN IF NOT EXISTS batch TEXT DEFAULT 'Unknown' NOT NULL;
+  `);
 
 
 
