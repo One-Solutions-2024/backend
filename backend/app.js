@@ -204,7 +204,12 @@ app.get("/api/jobs", async (req, res) => {
     const jobs = await pool.query(getAllJobsQuery, [sevenDaysAgo.toISOString(), limit, offset]);
 
     if (jobs.rows.length > 0) {
-      res.json(jobs.rows);
+      // Append the full image URL to each job object
+      const jobsWithImageUrl = jobs.rows.map(job => ({
+        ...job,
+        imageUrl: `${hostname}/uploads/${job.image}`,
+      }));
+      res.json(jobsWithImageUrl);
     } else {
       res.status(404).json({ error: "No jobs found" });
     }
@@ -213,6 +218,7 @@ app.get("/api/jobs", async (req, res) => {
     res.status(500).json({ error: "Failed to retrieve jobs" });
   }
 });
+
 
 // Admin Panel: Get all jobs (admin access only)
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
@@ -334,6 +340,7 @@ app.post(
 );
 
 // Fetch job by company name and job URL
+// Fetch job by company name and job URL
 app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
   const { companyname, url } = req.params;
 
@@ -345,7 +352,11 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     const job = await pool.query(getJobByCompanyNameQuery, [companyname, url]);
 
     if (job.rows.length) {
-      res.json(job.rows[0]);
+      const jobWithImageUrl = {
+        ...job.rows[0],
+        imageUrl: `${hostname}/uploads/${job.rows[0].image}` // Add image URL
+      };
+      res.json(jobWithImageUrl);
     } else {
       res.status(404).json({ error: "Job not found" });
     }
@@ -354,13 +365,21 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch job" });
   }
 });
+
+// Fetch the latest popup content
 // Fetch the latest popup content
 app.get("/api/popup", async (req, res) => {
   try {
     const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;");
     const popup = popupResult.rows[0];
+    
     if (popup) {
-      res.json({ popup });
+      // Append the full image URL to the popup if an image exists
+      const popupWithImageUrl = popup.image
+        ? { ...popup, imageUrl: `${hostname}/uploads/${popup.image}` }
+        : popup;  // If no image, return the popup as is
+
+      res.json({ popup: popupWithImageUrl });
     } else {
       res.json({ popup: null });
     }
@@ -369,6 +388,7 @@ app.get("/api/popup", async (req, res) => {
     res.status(500).json({ error: "Failed to retrieve popup content" });
   }
 });
+
 
 
 
