@@ -199,7 +199,7 @@ app.get("/api/jobs", async (req, res) => {
       // Append the full image URL to each job object
       const jobsWithImageUrl = jobs.rows.map(job => ({
         ...job,
-        getImageURL: `${hostname}/uploads/${job.image}`,
+        imageUrl: `${hostname}/uploads/${job.image}`,
       }));
       res.json(jobsWithImageUrl);
     } else {
@@ -346,7 +346,7 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     if (job.rows.length) {
       const jobWithImageUrl = {
         ...job.rows[0],
-        getImageURL: `${hostname}/uploads/${job.rows[0].image}` // Add image URL
+        imageUrl: `${hostname}/uploads/${job.rows[0].image}` // Add image URL
       };
       res.json(jobWithImageUrl);
     } else {
@@ -368,7 +368,7 @@ app.get("/api/popup", async (req, res) => {
     if (popup) {
       // Append the full image URL to the popup if an image exists
       const popupWithImageUrl = popup.image
-        ? { ...popup, getImageURL: `${hostname}/uploads/${popup.image}` }
+        ? { ...popup, imageUrl: `${hostname}/uploads/${popup.image}` }
         : popup;  // If no image, return the popup as is
 
       res.json({ popup: popupWithImageUrl });
