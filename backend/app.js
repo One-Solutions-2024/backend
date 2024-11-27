@@ -144,11 +144,7 @@ const initializeDbAndServer = async () => {
       );
     `);
 
-    // Check if the column exists, and add it if it doesn't
-    await pool.query(`
-      ALTER TABLE job 
-      RENAME COLUMN image_link to image;
-  `);
+    
 
 
 
@@ -165,11 +161,7 @@ const initializeDbAndServer = async () => {
       );
     `);
 
-     // Check if the column exists, and add it if it doesn't
-     await pool.query(`
-      ALTER TABLE popup_content 
-      RENAME COLUMN popup_link to image;
-  `);
+     
     // Start server on 0.0.0.0 for external access
     app.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
