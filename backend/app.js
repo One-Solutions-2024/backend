@@ -55,7 +55,7 @@ const storage = multer.diskStorage({
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/jpg"];
     if (!allowedTypes.includes(file.mimetype)) {
       return cb(new Error("Invalid file type"), false);
     }
@@ -199,7 +199,7 @@ app.get("/api/jobs", async (req, res) => {
       // Append the full image URL to each job object
       const jobsWithImageUrl = jobs.rows.map(job => ({
         ...job,
-        imageUrl: `${hostname}/uploads/${job.image}`,
+        getImageURL: `${hostname}/uploads/${job.image}`,
       }));
       res.json(jobsWithImageUrl);
     } else {
@@ -346,7 +346,7 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     if (job.rows.length) {
       const jobWithImageUrl = {
         ...job.rows[0],
-        imageUrl: `${hostname}/uploads/${job.rows[0].image}` // Add image URL
+        getImageURL: `${hostname}/uploads/${job.rows[0].image}` // Add image URL
       };
       res.json(jobWithImageUrl);
     } else {
@@ -368,7 +368,7 @@ app.get("/api/popup", async (req, res) => {
     if (popup) {
       // Append the full image URL to the popup if an image exists
       const popupWithImageUrl = popup.image
-        ? { ...popup, imageUrl: `${hostname}/uploads/${popup.image}` }
+        ? { ...popup, getImageURL: `${hostname}/uploads/${popup.image}` }
         : popup;  // If no image, return the popup as is
 
       res.json({ popup: popupWithImageUrl });
