@@ -4,12 +4,16 @@ const express = require("express");
 const { Pool } = require("pg");
 const cors = require("cors");
 const helmet = require("helmet");
-const { body, validationResult } = require("express-validator");
 const rateLimit = require("express-rate-limit");
 const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
 require("dotenv").config(); // Load environment variables
+
+const bodyParser = require("body-parser");
+const path = require("path");
+
+const multer = require("multer")
 
 const PORT = process.env.PORT || 3000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
@@ -32,6 +36,41 @@ app.use(cors());
 app.use(helmet()); // Basic security headers
 app.use(morgan("combined")); // Logging
 
+app.use(bodyParser.json());
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+// Dynamic hostname for serving image URLs
+const hostname = process.env.HOSTNAME || `http://localhost:${port}`;
+const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
+
+// Multer setup for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+      cb(null, "uploads/");
+  },
+  filename: (req, file, cb) => {
+      cb(null, `${Date.now()}-${file.originalname}`);
+  },
+});
+
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif"];
+    if (!allowedTypes.includes(file.mimetype)) {
+      return cb(new Error("Invalid file type"), false);
+    }
+    
+      cb(null, true);
+  },
+});
+
+// Error handling for file uploads
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: "File upload error", error: err.message });
+  }
+  next(err);
+});
 
 // Configure CORS for external access
 const corsOptions = {
@@ -93,7 +132,7 @@ const initializeDbAndServer = async () => {
         title TEXT NOT NULL,
         description TEXT NOT NULL,
         apply_link TEXT NOT NULL,
-        image_link TEXT NOT NULL,
+        image TEXT NOT NULL,
         url TEXT NOT NULL,
         salary TEXT NOT NULL,
         location TEXT NOT NULL,
@@ -108,11 +147,7 @@ const initializeDbAndServer = async () => {
     // Check if the column exists, and add it if it doesn't
     await pool.query(`
       ALTER TABLE job 
-      ADD COLUMN IF NOT EXISTS salary TEXT DEFAULT 'Unknown' NOT NULL,
-      ADD COLUMN IF NOT EXISTS location TEXT DEFAULT 'Unknown' NOT NULL,
-      ADD COLUMN IF NOT EXISTS job_type TEXT DEFAULT 'Unknown' NOT NULL,
-      ADD COLUMN IF NOT EXISTS experience TEXT DEFAULT 'Unknown' NOT NULL,
-      ADD COLUMN IF NOT EXISTS batch TEXT DEFAULT 'Unknown' NOT NULL;
+      RENAME COLUMN image_link to image;
   `);
 
 
@@ -123,81 +158,18 @@ const initializeDbAndServer = async () => {
           id SERIAL PRIMARY KEY,
           popup_heading TEXT NOT NULL,
           popup_text TEXT NOT NULL,
-          popup_link TEXT NOT NULL,
+          image TEXT NOT NULL,
           popup_belowtext TEXT NOT NULL,
           popup_routing_link TEXT NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-    const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
-    const popupCount = popUpCountResult.rows[0].count;
-
-    if (popupCount == 0) {
-      try {
-        const data = await fs.readFile("pops.json", "utf8");
-        const popList = JSON.parse(data); // popList should be an array
-
-        if (!Array.isArray(popList)) {
-          throw new Error("pops.json content is not an array");
-        }
-
-        const insertPopQuery = `
-          INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link)
-          VALUES ($1, $2, $3, $4, $5);
-        `;
-
-        for (const popup_content of popList) {
-          await pool.query(insertPopQuery, [
-            popup_content.popup_heading,
-            popup_content.popup_text,
-            popup_content.popup_link,
-            popup_content.popup_belowtext,
-            popup_content.popup_routing_link,
-          ]);
-        }
-        console.log("Pop Data Imported Successfully");
-      } catch (error) {
-        console.error("Error reading or processing pops.json:", error.message);
-        throw error; // rethrow the error to prevent the server from starting
-      }
-    }
-
-
-    // Insert jobs if table is empty
-    const jobsCountResult = await pool.query("SELECT COUNT(*) as count FROM job;");
-    const jobsCount = jobsCountResult.rows[0].count;
-
-    if (jobsCount == 0) {
-      const data = await fs.readFile("jobs.json", "utf8");
-      const jobList = JSON.parse(data);
-
-      const insertJobQuery = `
-         INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
-       `;
-
-      for (const job of jobList) {
-        await pool.query(insertJobQuery, [
-          job.companyname,
-          job.title,
-          job.description,
-          job.apply_link,
-          job.image_link,
-          job.url,
-          job.salary,
-          job.location,
-          job.job_type,
-          job.experience,
-          job.batch,
-          job.job_uploader,
-        ]);
-      }
-
-      console.log("Job data has been imported successfully.");
-    }
-
-
+     // Check if the column exists, and add it if it doesn't
+     await pool.query(`
+      ALTER TABLE popup_content 
+      RENAME COLUMN popup_link to image;
+  `);
     // Start server on 0.0.0.0 for external access
     app.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
@@ -257,9 +229,10 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
 
 
 // Route to update a job (admin access only)
-app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
   const { id } = req.params;
-  const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+  const { companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+  const newImage = req.file ? req.file.filename : null;
 
   try {
     const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
@@ -268,12 +241,36 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
       return res.status(404).json({ error: "Job not found" });
     }
 
+    const oldImage = existingJob.rows[0].image;
+
+    if (newImage && oldImage) {
+      // Delete the old image
+      const oldImagePath = path.join(__dirname, "uploads", oldImage);
+      await fs.unlink(oldImagePath).catch(() => null); // Ignore errors if file doesn't exist
+    }
+
     const updateJobQuery = `
       UPDATE job
-      SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
+      SET companyname = $1, title = $2, description = $3, apply_link = $4, image = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
       WHERE id = $13;
     `;
-    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader, id]);
+
+    await pool.query(updateJobQuery, [
+      companyname,
+      title,
+      description,
+      apply_link,
+      newImage || oldImage, // Use new image if provided, else keep the old image
+      url,
+      salary,
+      location,
+      job_type,
+      experience,
+      batch,
+      job_uploader,
+      id,
+    ]);
+
     res.json({ message: "Job updated successfully" });
   } catch (error) {
     console.error(`Error updating job: ${error.message}`);
@@ -292,8 +289,15 @@ app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) 
       return res.status(404).json({ error: "Job not found" });
     }
 
+    const job = existingJob.rows[0];
+    const imagePath = path.join(__dirname, "uploads", job.image);
+
+    // Delete the image file
+    await fs.unlink(imagePath).catch(() => null); // Ignore errors if file doesn't exist
+
     const deleteJobQuery = `DELETE FROM job WHERE id = $1;`;
     await pool.query(deleteJobQuery, [id]);
+
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
     console.error(`Error deleting job: ${error.message}`);
@@ -304,34 +308,23 @@ app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) 
 // Route to add a new job (admin access only, with validation)
 app.post(
   "/api/jobs",
+  upload.single("image"),
   authenticateToken,
   authorizeAdmin,
-  [
-    body("companyname").notEmpty(),
-    body("title").notEmpty(),
-    body("description").notEmpty(),
-    body("apply_link").isURL(),
-    body("image_link").isURL(),
-    body("url").notEmpty(),
-    body("salary").notEmpty(),
-    body("location").notEmpty(),
-    body("job_type").notEmpty(),
-    body("experience").notEmpty(),
-    body("batch").notEmpty(),
-    body("job_uploader").notEmpty(),
-  ],
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const { companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+    const imagePath = req.file ? req.file.filename : null;
 
-    const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+    if (!imagePath) {
+      return res.status(400).json({ error: "Image file is required." });
+    }
 
     try {
       const insertJobQuery = `
-        INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+        INSERT INTO job (companyname, title, description, apply_link, image, url, salary, location, job_type, experience, batch, job_uploader)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
       `;
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader]);
+      await pool.query(insertJobQuery, [companyname, title, description, apply_link, imagePath, url, salary, location, job_type, experience, batch, job_uploader]);
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error(`Error adding job: ${error.message}`);
@@ -390,37 +383,38 @@ app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, 
   }
 });
 
+
 app.post(
   "/api/popup/adminpanel",
-  authenticateToken, authorizeAdmin,
-  [
-    body("popup_heading").notEmpty(),
-    body("popup_text").notEmpty(),
-    body("popup_link").isURL(),
-    body("popup_routing_link").isURL(),
-    body("popup_belowtext").notEmpty(),
-  ],
+  authenticateToken,
+  authorizeAdmin,
+  upload.single("image"),
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-    const { popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext } = req.body;
-    try {
-      const insertPopQuery = `
-      INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link)
-      VALUES ($1, $2, $3, $4, $5);
-    `; await pool.query(insertPopQuery, [popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link]);
-      res.status(201).json({ message: "Pop added successfully" });
-    } catch (error) {
-      console.error(`Error adding Pop: ${error.message}`);
-      res.status(500).json({ error: "Failed to add Pop" });
+    const { popup_heading, popup_text, popup_routing_link, popup_belowtext } = req.body;
+    const imagePath = req.file ? req.file.filename : null;
+
+    if (!imagePath) {
+      return res.status(400).json({ error: "Image file is required." });
     }
 
+    try {
+      const insertPopQuery = `
+        INSERT INTO popup_content (popup_heading, popup_text, image, popup_belowtext, popup_routing_link)
+        VALUES ($1, $2, $3, $4, $5);
+      `;
+      await pool.query(insertPopQuery, [popup_heading, popup_text, imagePath, popup_belowtext, popup_routing_link]);
+      res.status(201).json({ message: "Popup added successfully" });
+    } catch (error) {
+      console.error(`Error adding popup: ${error.message}`);
+      res.status(500).json({ error: "Failed to add popup" });
+    }
   }
-)
+);
 // Admin Panel: Update specific popup content
-app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
   const { id } = req.params;
-  const { popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext } = req.body;
+  const { popup_heading, popup_text, popup_belowtext, popup_routing_link } = req.body;
+  const newImage = req.file ? req.file.filename : null;
 
   try {
     const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id]);
@@ -429,22 +423,36 @@ app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (r
       return res.status(404).json({ error: "Popup not found" });
     }
 
+    const oldImage = existingPopup.rows[0].image;
+
+    if (newImage && oldImage) {
+      // Delete the old image
+      const oldImagePath = path.join(__dirname, "uploads", oldImage);
+      await fs.unlink(oldImagePath).catch(() => null); // Ignore errors if file doesn't exist
+    }
+
     const updatePopupQuery = `
       UPDATE popup_content
-      SET popup_heading = $1,
-          popup_text = $2,
-          popup_link = $3,
-          popup_routing_link = $4,
-          popup_belowtext = $5
+      SET popup_heading = $1, popup_text = $2, popup_belowtext = $3, popup_routing_link = $4, image = $5
       WHERE id = $6;
     `;
-    await pool.query(updatePopupQuery, [popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext, id]);
+
+    await pool.query(updatePopupQuery, [
+      popup_heading,
+      popup_text,
+      popup_belowtext,
+      popup_routing_link,
+      newImage || oldImage, // Use new image if provided, else keep the old image
+      id,
+    ]);
+
     res.json({ message: "Popup content updated successfully" });
   } catch (error) {
     console.error(`Error updating popup content: ${error.message}`);
     res.status(500).json({ error: "Failed to update popup content" });
   }
 });
+
 
 // Admin Panel: Delete specific popup content by ID
 app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
@@ -457,14 +465,22 @@ app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async
       return res.status(404).json({ error: "Popup not found" });
     }
 
+    const popup = existingPopup.rows[0];
+    const imagePath = path.join(__dirname, "uploads", popup.image);
+
+    // Delete the image file
+    await fs.unlink(imagePath).catch(() => null); // Ignore errors if file doesn't exist
+
     const deletePopupQuery = `DELETE FROM popup_content WHERE id = $1;`;
     await pool.query(deletePopupQuery, [id]);
+
     res.json({ message: "Popup content deleted successfully" });
   } catch (error) {
     console.error(`Error deleting popup content: ${error.message}`);
     res.status(500).json({ error: "Failed to delete popup content" });
   }
 });
+
 
 
 
