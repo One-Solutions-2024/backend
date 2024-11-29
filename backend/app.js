@@ -211,6 +211,18 @@ app.get("/api/jobs", async (req, res) => {
   }
 });
 
+app.get("/api/jobs", async (req, res) => {
+  try {
+      const { rows } = await pool.query(
+          "SELECT id, sitename, sitetitle, siteaddress, sitedescription, COALESCE(images, '') AS images, category FROM sites"
+      );
+      res.json({ sites: rows });
+  } catch (error) {
+      console.error("Error fetching sites:", error);
+      res.status(500).json({ message: "Error fetching sites" });
+  }
+});
+
 
 // Admin Panel: Get all jobs (admin access only)
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
