@@ -42,41 +42,22 @@ app.use(helmet()); // Basic security headers
 app.use(morgan("combined")); // Logging
 
 app.use(bodyParser.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Dynamic hostname for serving image URLs
 const hostname = process.env.HOSTNAME || `http://localhost:${port}`;
 const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
 // Multer setup for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-      cb(null, "uploads/");
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
   },
-  filename: (req, file, cb) => {
-      cb(null, `${Date.now()}-${file.originalname}`);
-  },
-});
-
-const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/jpg"];
-    if (!allowedTypes.includes(file.mimetype)) {
-      return cb(new Error("Invalid file type"), false);
-    }
-    
-      cb(null, true);
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname);
   },
 });
 
-// Error handling for file uploads
-app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-      return res.status(400).json({ message: "File upload error", error: err.message });
-  }
-  next(err);
-});
-
+const upload = multer({ storage: storage });
 // Configure CORS for external access
 const corsOptions = {
   origin: "*", // Replace "*" with specific domains for production
