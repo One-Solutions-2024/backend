@@ -25,7 +25,12 @@ const DEFAULT_PASSWORD = "Ekam#95423";
 // Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, // SSL only in production
 });
+
+pool.connect()
+  .then(() => console.log('Connected to PostgreSQL database'))
+  .catch((err) => console.error('Database connection error:', err.stack));
 
 // Initialize Express app
 const app = express();
@@ -503,10 +508,6 @@ app.use((req, res, next) => {
   next();
 });
 
-
-pool.connect()
-  .then(() => console.log('Connected to PostgreSQL database'))
-  .catch((err) => console.error('Database connection error:', err.stack));
 
 // Root route
 app.get("/", (req, res) => {
