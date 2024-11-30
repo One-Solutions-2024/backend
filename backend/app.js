@@ -15,7 +15,7 @@ const path = require("path");
 
 const multer = require("multer")
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
 
 // Default admin credentials
