@@ -1,4 +1,3 @@
-
 // Import required modules
 const express = require("express");
 const { Pool } = require("pg");
@@ -8,29 +7,20 @@ const rateLimit = require("express-rate-limit");
 const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
-require("dotenv").config(); // Load environment variables
-
 const bodyParser = require("body-parser");
 const path = require("path");
-
-const multer = require("multer")
+const multer = require("multer");
+require("dotenv").config(); // Load environment variables
 
 const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
-
-// Default admin credentials
+const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN";
 const DEFAULT_USERNAME = "Ekambaram";
 const DEFAULT_PASSWORD = "Ekam#95423";
 
-// Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === 'production' ? { rejectUnauthorized: false } : false, // SSL only in production
+  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
-
-pool.connect()
-  .then(() => console.log('Connected to PostgreSQL database'))
-  .catch((err) => console.error('Database connection error:', err.stack));
 
 // Initialize Express app
 const app = express();
@@ -38,66 +28,42 @@ const app = express();
 // Middleware
 app.use(express.json());
 app.use(cors());
-app.use(helmet()); // Basic security headers
-app.use(morgan("combined")); // Logging
-
+app.use(helmet());
+app.use(morgan("combined"));
 app.use(bodyParser.json());
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
 // Dynamic hostname for serving image URLs
-const hostname = process.env.HOSTNAME || `http://localhost:${port}`;
+const hostname = process.env.HOSTNAME || `http://localhost:${PORT}`;
 const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
 // Multer setup for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-      cb(null, "uploads/");
-  },
-  filename: (req, file, cb) => {
-      cb(null, `${Date.now()}-${file.originalname}`);
-  },
+  destination: (req, file, cb) => cb(null, "uploads/"),
+  filename: (req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
 });
-
 const upload = multer({
   storage,
   fileFilter: (req, file, cb) => {
     const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/jpg"];
-    if (!allowedTypes.includes(file.mimetype)) {
-      return cb(new Error("Invalid file type"), false);
-    }
-    
-      cb(null, true);
+    allowedTypes.includes(file.mimetype) ? cb(null, true) : cb(new Error("Invalid file type"));
   },
 });
 
-// Error handling for file uploads
-app.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError) {
-      return res.status(400).json({ message: "File upload error", error: err.message });
-  }
-  next(err);
-});
-
-// Configure CORS for external access
-const corsOptions = {
-  origin: "*", // Replace "*" with specific domains for production
-};
-app.use(cors(corsOptions));
-
-
-// Rate limiting
+// Middleware for rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Limit each IP to 100 requests per windowMs
+  windowMs: 15 * 60 * 1000,
+  max: 100,
 });
-app.use(limiter); // Apply rate limiting to all routes
+app.use(limiter);
 
-// JWT Authentication
+// Middleware for JWT Authentication
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
   if (!token) return res.status(401).send("Unauthorized: No token provided");
-  jwt.verify(token, JWT_SECRET, (error, user) => {
-    if (error) return res.status(403).send("Unauthorized: Invalid token");
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).send("Unauthorized: Invalid token");
     req.user = user;
     next();
   });
@@ -109,25 +75,28 @@ const authorizeAdmin = (req, res, next) => {
   else res.status(403).send("Access denied: Admins only");
 };
 
-
-
-
+// Utility function to execute queries
+const executeQuery = async (query, params = []) => {
+  try {
+    return await pool.query(query, params);
+  } catch (error) {
+    console.error("Database Query Error:", error.message);
+    throw new Error("Database operation failed");
+  }
+};
 
 // Login route
 app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
   if (username === DEFAULT_USERNAME && password === DEFAULT_PASSWORD) {
-    const token = jwt.sign({ username, role: "admin" }, JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign({ username, role: "admin" }, JWT_SECRET, { expiresIn: "1h" });
     res.json({ message: "Login successful", token });
   } else {
     res.status(401).json({ error: "Invalid username or password" });
   }
 });
 
-
-// Initialize DB and start server
+// Database initialization
 const initializeDbAndServer = async () => {
   try {
     await pool.query(`
@@ -149,74 +118,44 @@ const initializeDbAndServer = async () => {
       );
     `);
 
-    
-
-
-
-    // Create popup_content table
     await pool.query(`
-            CREATE TABLE IF NOT EXISTS popup_content (
-          id SERIAL PRIMARY KEY,
-          popup_heading TEXT NOT NULL,
-          popup_text TEXT NOT NULL,
-          image TEXT NOT NULL,
-          popup_belowtext TEXT NOT NULL,
-          popup_routing_link TEXT NOT NULL,
-          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      CREATE TABLE IF NOT EXISTS popup_content (
+        id SERIAL PRIMARY KEY,
+        popup_heading TEXT NOT NULL,
+        popup_text TEXT NOT NULL,
+        image TEXT NOT NULL,
+        popup_belowtext TEXT NOT NULL,
+        popup_routing_link TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-     
-    // Start server on 0.0.0.0 for external access
     app.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
     });
-
-
   } catch (error) {
-    console.error(`Error initializing the database: ${error.message}`);
+    console.error("Error initializing database:", error.message);
     process.exit(1);
   }
 };
-// Route to get all jobs with pagination
+
+// Routes for job entity
 app.get("/api/jobs", async (req, res) => {
   const { page = 1, limit = 8 } = req.query;
-
+  const offset = (page - 1) * limit;
   try {
-    const offset = (page - 1) * parseInt(limit);
-    const currentTime = new Date();
-    const sevenDaysAgo = new Date(currentTime.setDate(currentTime.getDate() - 7));
-
-    const getAllJobsQuery = `
-      SELECT *, 
-      CASE 
-        WHEN createdAt >= $1 THEN 1 
-        ELSE 0 
-      END as isNew 
-      FROM job 
-      ORDER BY isNew DESC, createdAt DESC 
-      LIMIT $2 OFFSET $3;
+    const query = `
+      SELECT *, CASE WHEN createdAt >= NOW() - INTERVAL '7 days' THEN 1 ELSE 0 END AS isNew
+      FROM job
+      ORDER BY isNew DESC, createdAt DESC
+      LIMIT $1 OFFSET $2;
     `;
-
-    const jobs = await pool.query(getAllJobsQuery, [sevenDaysAgo.toISOString(), limit, offset]);
-
-    if (jobs.rows.length > 0) {
-      // Append the full image URL to each job object
-      const jobsWithImageUrl = jobs.rows.map(job => ({
-        ...job,
-        imageUrl: `${hostname}/uploads/${job.image}`,
-      }));
-      res.json(jobsWithImageUrl);
-    } else {
-      res.status(404).json({ error: "No jobs found" });
-    }
+    const jobs = await executeQuery(query, [limit, offset]);
+    res.json(jobs.rows.map(job => ({ ...job, imageUrl: getImageURL(job.image) })));
   } catch (error) {
-    console.error(`Error fetching all jobs: ${error.message}`);
     res.status(500).json({ error: "Failed to retrieve jobs" });
   }
 });
-
-
 
 
 // Admin Panel: Get all jobs (admin access only)
@@ -232,113 +171,64 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
   }
 });
 
+app.post("/api/jobs", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
+  const { companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+  const image = req.file ? req.file.filename : null;
+  if (!image) return res.status(400).json({ error: "Image file is required" });
 
-// Route to update a job (admin access only)
+  try {
+    const query = `
+      INSERT INTO job (companyname, title, description, apply_link, image, url, salary, location, job_type, experience, batch, job_uploader)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+    `;
+    await executeQuery(query, [companyname, title, description, apply_link, image, url, salary, location, job_type, experience, batch, job_uploader]);
+    res.status(201).json({ message: "Job added successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to add job" });
+  }
+});
+
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
   const { id } = req.params;
   const { companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
   const newImage = req.file ? req.file.filename : null;
 
   try {
-    const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
-
-    if (!existingJob.rows.length) {
-      return res.status(404).json({ error: "Job not found" });
-    }
+    const existingJob = await executeQuery("SELECT * FROM job WHERE id = $1;", [id]);
+    if (!existingJob.rows.length) return res.status(404).json({ error: "Job not found" });
 
     const oldImage = existingJob.rows[0].image;
+    if (newImage && oldImage) await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(() => null);
 
-    if (newImage && oldImage) {
-      // Delete the old image
-      const oldImagePath = path.join(__dirname, "uploads", oldImage);
-      await fs.unlink(oldImagePath).catch(() => null); // Ignore errors if file doesn't exist
-    }
-
-    const updateJobQuery = `
+    const query = `
       UPDATE job
       SET companyname = $1, title = $2, description = $3, apply_link = $4, image = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
       WHERE id = $13;
     `;
-
-    await pool.query(updateJobQuery, [
-      companyname,
-      title,
-      description,
-      apply_link,
-      newImage || oldImage, // Use new image if provided, else keep the old image
-      url,
-      salary,
-      location,
-      job_type,
-      experience,
-      batch,
-      job_uploader,
-      id,
-    ]);
-
+    await executeQuery(query, [companyname, title, description, apply_link, newImage || oldImage, url, salary, location, job_type, experience, batch, job_uploader, id]);
     res.json({ message: "Job updated successfully" });
   } catch (error) {
-    console.error(`Error updating job: ${error.message}`);
     res.status(500).json({ error: "Failed to update job" });
   }
 });
 
-// Route to delete a job (admin access only)
+// Delete a job
 app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
-
   try {
-    const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
+    const job = await executeQuery("SELECT * FROM job WHERE id = $1;", [id]);
+    if (!job.rows.length) return res.status(404).json({ error: "Job not found" });
 
-    if (!existingJob.rows.length) {
-      return res.status(404).json({ error: "Job not found" });
-    }
+    const imageToDelete = job.rows[0].image;
+    if (imageToDelete) await fs.unlink(path.join(__dirname, "uploads", imageToDelete)).catch(() => null);
 
-    const job = existingJob.rows[0];
-    const imagePath = path.join(__dirname, "uploads", job.image);
-
-    // Delete the image file
-    await fs.unlink(imagePath).catch(() => null); // Ignore errors if file doesn't exist
-
-    const deleteJobQuery = `DELETE FROM job WHERE id = $1;`;
-    await pool.query(deleteJobQuery, [id]);
-
+    await executeQuery("DELETE FROM job WHERE id = $1;", [id]);
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
-    console.error(`Error deleting job: ${error.message}`);
     res.status(500).json({ error: "Failed to delete job" });
   }
 });
 
-// Route to add a new job (admin access only, with validation)
-app.post(
-  "/api/jobs",
-  upload.single("image"),
-  authenticateToken,
-  authorizeAdmin,
-  async (req, res) => {
-    const { companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
-    const imagePath = req.file ? req.file.filename : null;
-
-    if (!imagePath) {
-      return res.status(400).json({ error: "Image file is required." });
-    }
-
-    try {
-      const insertJobQuery = `
-        INSERT INTO job (companyname, title, description, apply_link, image, url, salary, location, job_type, experience, batch, job_uploader)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
-      `;
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, imagePath, url, salary, location, job_type, experience, batch, job_uploader]);
-      res.status(201).json({ message: "Job added successfully" });
-    } catch (error) {
-      console.error(`Error adding job: ${error.message}`);
-      res.status(500).json({ error: "Failed to add job" });
-    }
-  }
-);
-
-// Fetch job by company name and job URL
 // Fetch job by company name and job URL
 app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
   const { companyname, url } = req.params;
@@ -353,9 +243,10 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     if (job.rows.length) {
       const jobWithImageUrl = {
         ...job.rows[0],
-        imageUrl: `${hostname}/uploads/${job.rows[0].image}` // Add image URL
+        imageUrl: getImageURL(job.rows[0].image),
       };
       res.json(jobWithImageUrl);
+      
     } else {
       res.status(404).json({ error: "Job not found" });
     }
@@ -365,31 +256,22 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
   }
 });
 
-// Fetch the latest popup content
-// Fetch the latest popup content
+
+
+
+// Routes for popup_content entity (similar to jobs)
 app.get("/api/popup", async (req, res) => {
   try {
-    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;");
-    const popup = popupResult.rows[0];
-    
-    if (popup) {
-      // Append the full image URL to the popup if an image exists
-      const popupWithImageUrl = popup.image
-        ? { ...popup, imageUrl: `${hostname}/uploads/${popup.image}` }
-        : popup;  // If no image, return the popup as is
+    const query = "SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;";
+    const popup = await executeQuery(query);
+    if (!popup.rows.length) return res.json({ popup: null });
 
-      res.json({ popup: popupWithImageUrl });
-    } else {
-      res.json({ popup: null });
-    }
+    const popupWithImageUrl = { ...popup.rows[0], imageUrl: getImageURL(popup.rows[0].image) };
+    res.json({ popup: popupWithImageUrl });
   } catch (error) {
-    console.error(`Error fetching popup content: ${error.message}`);
     res.status(500).json({ error: "Failed to retrieve popup content" });
   }
 });
-
-
-
 
 // Admin Panel: Get all popup content
 app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
@@ -402,123 +284,64 @@ app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, 
   }
 });
 
+app.post("/api/popup/adminpanel", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
+  const { popup_heading, popup_text, popup_belowtext, popup_routing_link } = req.body;
+  const image = req.file ? req.file.filename : null;
+  if (!image) return res.status(400).json({ error: "Image file is required" });
 
-app.post(
-  "/api/popup/adminpanel",
-  authenticateToken,
-  authorizeAdmin,
-  upload.single("image"),
-  async (req, res) => {
-    const { popup_heading, popup_text, popup_routing_link, popup_belowtext } = req.body;
-    const imagePath = req.file ? req.file.filename : null;
-
-    if (!imagePath) {
-      return res.status(400).json({ error: "Image file is required." });
-    }
-
-    try {
-      const insertPopQuery = `
-        INSERT INTO popup_content (popup_heading, popup_text, image, popup_belowtext, popup_routing_link)
-        VALUES ($1, $2, $3, $4, $5);
-      `;
-      await pool.query(insertPopQuery, [popup_heading, popup_text, imagePath, popup_belowtext, popup_routing_link]);
-      res.status(201).json({ message: "Popup added successfully" });
-    } catch (error) {
-      console.error(`Error adding popup: ${error.message}`);
-      res.status(500).json({ error: "Failed to add popup" });
-    }
+  try {
+    const query = `
+      INSERT INTO popup_content (popup_heading, popup_text, image, popup_belowtext, popup_routing_link)
+      VALUES ($1, $2, $3, $4, $5);
+    `;
+    await executeQuery(query, [popup_heading, popup_text, image, popup_belowtext, popup_routing_link]);
+    res.status(201).json({ message: "Popup content added successfully" });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to add popup content" });
   }
-);
-// Admin Panel: Update specific popup content
+});
+
+// Update popup_content by ID
 app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
   const { id } = req.params;
   const { popup_heading, popup_text, popup_belowtext, popup_routing_link } = req.body;
   const newImage = req.file ? req.file.filename : null;
 
   try {
-    const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id]);
-
-    if (!existingPopup.rows.length) {
-      return res.status(404).json({ error: "Popup not found" });
-    }
+    const existingPopup = await executeQuery("SELECT * FROM popup_content WHERE id = $1;", [id]);
+    if (!existingPopup.rows.length) return res.status(404).json({ error: "Popup content not found" });
 
     const oldImage = existingPopup.rows[0].image;
+    if (newImage && oldImage) await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(() => null);
 
-    if (newImage && oldImage) {
-      // Delete the old image
-      const oldImagePath = path.join(__dirname, "uploads", oldImage);
-      await fs.unlink(oldImagePath).catch(() => null); // Ignore errors if file doesn't exist
-    }
-
-    const updatePopupQuery = `
+    const query = `
       UPDATE popup_content
       SET popup_heading = $1, popup_text = $2, popup_belowtext = $3, popup_routing_link = $4, image = $5
       WHERE id = $6;
     `;
-
-    await pool.query(updatePopupQuery, [
-      popup_heading,
-      popup_text,
-      popup_belowtext,
-      popup_routing_link,
-      newImage || oldImage, // Use new image if provided, else keep the old image
-      id,
-    ]);
-
+    await executeQuery(query, [popup_heading, popup_text, popup_belowtext, popup_routing_link, newImage || oldImage, id]);
     res.json({ message: "Popup content updated successfully" });
   } catch (error) {
-    console.error(`Error updating popup content: ${error.message}`);
     res.status(500).json({ error: "Failed to update popup content" });
   }
 });
 
-
-// Admin Panel: Delete specific popup content by ID
+// Delete popup_content by ID
 app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
-
   try {
-    const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id]);
+    const popup = await executeQuery("SELECT * FROM popup_content WHERE id = $1;", [id]);
+    if (!popup.rows.length) return res.status(404).json({ error: "Popup content not found" });
 
-    if (!existingPopup.rows.length) {
-      return res.status(404).json({ error: "Popup not found" });
-    }
+    const imageToDelete = popup.rows[0].image;
+    if (imageToDelete) await fs.unlink(path.join(__dirname, "uploads", imageToDelete)).catch(() => null);
 
-    const popup = existingPopup.rows[0];
-    const imagePath = path.join(__dirname, "uploads", popup.image);
-
-    // Delete the image file
-    await fs.unlink(imagePath).catch(() => null); // Ignore errors if file doesn't exist
-
-    const deletePopupQuery = `DELETE FROM popup_content WHERE id = $1;`;
-    await pool.query(deletePopupQuery, [id]);
-
+    await executeQuery("DELETE FROM popup_content WHERE id = $1;", [id]);
     res.json({ message: "Popup content deleted successfully" });
   } catch (error) {
-    console.error(`Error deleting popup content: ${error.message}`);
     res.status(500).json({ error: "Failed to delete popup content" });
   }
 });
 
-
-
-
-app.use((req, res, next) => {
-  res.set('Cache-Control', 'no-store');
-  next();
-});
-
-
-// Root route
-app.get("/", (req, res) => {
-  res.send("Welcome to the Job Card Details API!");
-});
-
-// Middleware for error handling
-app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: "Something went wrong!" });
-});
-
-// Connect to the database and start the server
+// Start server
 initializeDbAndServer();
