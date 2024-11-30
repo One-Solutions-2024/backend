@@ -49,15 +49,34 @@ const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
 // Multer setup for file uploads
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/');
+  destination: (req, file, cb) => {
+      cb(null, "uploads/");
   },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + '-' + file.originalname);
+  filename: (req, file, cb) => {
+      cb(null, `${Date.now()}-${file.originalname}`);
   },
 });
 
-const upload = multer({ storage: storage });
+const upload = multer({
+  storage,
+  fileFilter: (req, file, cb) => {
+    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/jpg"];
+    if (!allowedTypes.includes(file.mimetype)) {
+      return cb(new Error("Invalid file type"), false);
+    }
+    
+      cb(null, true);
+  },
+});
+
+// Error handling for file uploads
+app.use((err, req, res, next) => {
+  if (err instanceof multer.MulterError) {
+      return res.status(400).json({ message: "File upload error", error: err.message });
+  }
+  next(err);
+});
+
 // Configure CORS for external access
 const corsOptions = {
   origin: "*", // Replace "*" with specific domains for production
