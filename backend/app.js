@@ -27,9 +27,18 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
+// Allow only your frontend's origin
+const corsOptions = {
+  origin: "https://onesolutions.onrender.com", // Replace with your actual frontend URL
+  methods: ["GET", "POST", "PUT", "DELETE"],
+  credentials: true, // Allow cookies and credentials if needed
+};
+
 // Initialize Express app
 const app = express();
 
+// Apply CORS middleware
+app.use(cors(corsOptions));
 // Middleware
 app.use(express.json());
 app.use(cors());
