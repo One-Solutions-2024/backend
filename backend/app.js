@@ -37,6 +37,12 @@ app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 const hostname = process.env.HOSTNAME || `http://localhost:${PORT}`;
 const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
+
+const uploadsDir = path.join(__dirname, "uploads");
+fs.mkdir(uploadsDir, { recursive: true })
+  .then(() => console.log("Uploads directory ensured"))
+  .catch((err) => console.error("Failed to create uploads directory:", err));
+
 // Multer setup for file uploads
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, "uploads/"),
