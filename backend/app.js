@@ -18,7 +18,7 @@ const DEFAULT_USERNAME = "Ekambaram";
 const DEFAULT_PASSWORD = "Ekam#95423";
 
 const pool = new Pool({
-  connectionString: "postgresql://ekambaram:ekam83285@localhost:5432/jobDataBase",
+  connectionString: "process.env.DATABASE_URL",
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
