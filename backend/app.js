@@ -18,6 +18,11 @@ const DEFAULT_USERNAME = "Ekambaram";
 const DEFAULT_PASSWORD = "Ekam#95423";
 
 const pool = new Pool({
+  user: "jobdatabase_hb91_user",
+  host: "dpg-ct5uh71opnds73dajum0-a",
+  database: "jobdatabase_hb91",
+  password: "0zriy8UuaXHxgwccf2UIeHhMcAC6yRCQ",
+  port: 5432, // default PostgreSQL port
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
@@ -147,19 +152,13 @@ const initializeDbAndServer = async () => {
 
 // Routes for job entity
 app.get("/api/jobs", async (req, res) => {
-  const { page = 1, limit = 8 } = req.query;
-  const offset = (page - 1) * limit;
   try {
-    const query = `
-      SELECT *, CASE WHEN createdAt >= NOW() - INTERVAL '7 days' THEN 1 ELSE 0 END AS isNew
-      FROM job
-      ORDER BY isNew DESC, createdAt DESC
-      LIMIT $1 OFFSET $2;
-    `;
-    const jobs = await executeQuery(query, [limit, offset]);
-    res.json(jobs.rows.map(job => ({ ...job, imageUrl: getImageURL(job.image) })));
-  } catch (error) {
-    res.status(500).json({ error: "Failed to retrieve jobs" });
+    const query = "SELECT * FROM job ORDER BY createdat DESC";
+    const { rows } = await pool.query(query);
+    res.json(rows);
+  } catch (err) {
+    console.error("Error fetching jobs:", err.message);
+    res.status(500).json({ error: "Failed to fetch jobs" });
   }
 });
 
