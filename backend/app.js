@@ -1,3 +1,5 @@
+
+
 // Import required modules
 const express = require("express");
 const { Pool } = require("pg");
@@ -217,7 +219,7 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, upload.single("image
       SET companyname = $1, title = $2, description = $3, apply_link = $4, image = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
       WHERE id = $13;
     `;
-    await executeQuery(query, [companyname, title, description, apply_link, newImage || oldImage, url, salary, location, job_type, experience, batch, job_u ploader, id]);
+    await executeQuery(query, [companyname, title, description, apply_link, newImage || oldImage, url, salary, location, job_type, experience, batch, job_uploader, id]);
     res.json({ message: "Job updated successfully" });
   } catch (error) {
     res.status(500).json({ error: "Failed to update job" });
