@@ -27,27 +27,6 @@ const pool = new Pool({
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
 });
 
-// Allow only your frontend's origin
-const corsOptions = {
-  origin: (origin, callback) => {
-    // List of allowed origins
-    const allowedOrigins = [
-      "https://onesolutions.onrender.com",
-      "https://onesolutions-admin.onrender.com",
-    ];
-    
-    if (allowedOrigins.includes(origin) || !origin) {
-      callback(null, true); // Allow access
-    } else {
-      callback(new Error("Not allowed by CORS")); // Reject access
-    }
-  },
-  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"], // Allowed methods
-  credentials: true, // Allow cookies and credentials
-};
-
-
-
 
 
 // Initialize Express app
@@ -118,9 +97,6 @@ const executeQuery = async (query, params = []) => {
     throw new Error("Database operation failed");
   }
 };
-
-// Apply CORS middleware
-app.use(cors(corsOptions));
 
 // Login route
 app.post("/api/login", async (req, res) => {
