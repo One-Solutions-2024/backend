@@ -29,7 +29,7 @@ const pool = new Pool({
 
 // Allow only your frontend's origin
 const corsOptions = {
-  origin: "https://onesolutions.onrender.com", // Replace with your actual frontend URL
+  origin: "https://onesolutions.onrender.com" || "https://onesolutions-admin.onrender.com", // Replace with your actual frontend URL
   methods: ["GET", "POST", "PUT", "DELETE"],
   credentials: true, // Allow cookies and credentials if needed
 };
