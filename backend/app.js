@@ -18,10 +18,10 @@ const DEFAULT_USERNAME = "Ekambaram";
 const DEFAULT_PASSWORD = "Ekam#95423";
 
 const pool = new Pool({
-  user: "jobdatabase_hb91_user",
-  host: "dpg-ct5uh71opnds73dajum0-a",
-  database: "jobdatabase_hb91",
-  password: "0zriy8UuaXHxgwccf2UIeHhMcAC6yRCQ",
+  user: "jobdatabase_hobn_user",
+  host: "dpg-ct6ltatds78s73c58jh0-a",
+  database: "jobdatabase_hobn",
+  password: "MbZX1UnM4kj123mJdtctATfvAfDf9Qdt",
   port: 5432, // default PostgreSQL port
   connectionString: process.env.DATABASE_URL,
   ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
@@ -48,7 +48,7 @@ app.use(bodyParser.json());
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Dynamic hostname for serving image URLs
-const hostname = process.env.HOSTNAME || `http://localhost:${PORT}`;
+const hostname = process.env.HOSTNAME || `https://backend-lt9m.onrender.com`;
 const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
 
