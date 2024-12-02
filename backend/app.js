@@ -38,30 +38,44 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan("combined"));
 app.use(bodyParser.json());
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static('uploads'));
 
 // Dynamic hostname for serving image URLs
-const hostname = process.env.HOSTNAME || `https://backend-lt9m.onrender.com`;
+const hostname = process.env.HOSTNAME || `http://localhost:${PORT}/`;
 const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
 
-const uploadsDir = path.join(__dirname, "uploads");
-fs.mkdir(uploadsDir, { recursive: true })
+fs.mkdir("uploads",  { recursive: true })
   .then(() => console.log("Uploads directory ensured"))
   .catch((err) => console.error("Failed to create uploads directory:", err));
 
+
+  // Set up CORS to allow all origins for image serving
+// Set up CORS for image serving
+// Set up CORS for image serving with Cache-Control headers
+app.use("/uploads", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*"); // Allow any origin
+  res.setHeader("Access-Control-Allow-Methods", "GET"); // Allow only GET for static files
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type"); // Allow content type headers
+  
+  // Set Cache-Control headers to prevent caching
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate"); // No caching
+  res.setHeader("Pragma", "no-cache"); // HTTP 1.0 compatibility
+  res.setHeader("Expires", "0"); // No expiration
+
+  next();
+});
+
+
+
 // Multer setup for file uploads
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => cb(null, "uploads/"),
-  filename: (req, file, cb) => cb(null, `${file.originalname}`),
-});
-const upload = multer({
-  storage,
-  fileFilter: (req, file, cb) => {
-    const allowedTypes = ["image/jpeg", "image/png", "image/gif", "image/jpg"];
-    allowedTypes.includes(file.mimetype) ? cb(null, true) : cb(new Error("Invalid file type"));
-  },
-});
+  destination: "uploads",
+  filename: (req, file, cb) => {
+    return cb(null, `${file.originalname}`)
+  }
+})
+const upload = multer({storage : storage});
 
 // Middleware for rate limiting
 const limiter = rateLimit({
@@ -248,12 +262,7 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     const job = await pool.query(getJobByCompanyNameQuery, [companyname, url]);
 
     if (job.rows.length) {
-      const jobWithImageUrl = {
-        ...job.rows[0],
-        imageUrl: getImageURL(job.rows[0].image),
-      };
-      res.json(jobWithImageUrl);
-      
+      res.json(job.rows[0]);
     } else {
       res.status(404).json({ error: "Job not found" });
     }
@@ -266,19 +275,23 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
 
 
 
+
 // Routes for popup_content entity (similar to jobs)
 app.get("/api/popup", async (req, res) => {
   try {
-    const query = "SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;";
-    const popup = await executeQuery(query);
-    if (!popup.rows.length) return res.json({ popup: null });
-
-    const popupWithImageUrl = { ...popup.rows[0], imageUrl: getImageURL(popup.rows[0].image) };
-    res.json({ popup: popupWithImageUrl });
+    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;");
+    const popup = popupResult.rows[0];
+    if (popup) {
+      res.json({ popup });
+    } else {
+      res.json({ popup: null });
+    }
   } catch (error) {
+    console.error(`Error fetching popup content: ${error.message}`);
     res.status(500).json({ error: "Failed to retrieve popup content" });
   }
 });
+
 
 // Admin Panel: Get all popup content
 app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
