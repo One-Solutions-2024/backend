@@ -40,7 +40,6 @@ app.use(cors());
 app.use(helmet());
 app.use(morgan("combined"));
 app.use(bodyParser.json());
-app.use("/uploads", express.static('uploads'));
 
 // Dynamic hostname for serving image URLs
 const hostname = process.env.HOSTNAME || `http://localhost:${PORT}/`;
@@ -68,6 +67,12 @@ app.use("/uploads", (req, res, next) => {
   next();
 });
 
+const corsOptions = {
+  origin: '*', // Allow all origins
+  methods: ['GET'], // Allow only GET method
+};
+
+app.use('/uploads', cors(corsOptions), express.static('uploads'));
 
 
 // Multer setup for file uploads
