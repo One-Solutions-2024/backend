@@ -36,9 +36,11 @@ const app = express();
 
 // Middleware
 app.use(express.json());
+app.use(cors());
 app.use(helmet());
 app.use(morgan("combined"));
 app.use(bodyParser.json());
+app.use("/uploads", express.static('uploads'));
 
 // Dynamic hostname for serving image URLs
 const hostname = process.env.HOSTNAME || `http://localhost:${PORT}/`;
@@ -50,8 +52,23 @@ fs.mkdir("uploads",  { recursive: true })
   .catch((err) => console.error("Failed to create uploads directory:", err));
 
 
- // Serve static files from the uploads directory
-app.use("/uploads", express.static("uploads"));
+  // Set up CORS to allow all origins for image serving
+// Set up CORS for image serving
+// Set up CORS for image serving with Cache-Control headers
+app.use("/uploads", (req, res, next) => {
+  res.setHeader("Access-Control-Allow-Origin", "*"); // Allow any origin
+  res.setHeader("Access-Control-Allow-Methods", "GET"); // Allow only GET for static files
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type"); // Allow content type headers
+  
+  // Set Cache-Control headers to prevent caching
+  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate"); // No caching
+  res.setHeader("Pragma", "no-cache"); // HTTP 1.0 compatibility
+  res.setHeader("Expires", "0"); // No expiration
+
+  next();
+});
+
+
 
 // Multer setup for file uploads
 const storage = multer.diskStorage({
