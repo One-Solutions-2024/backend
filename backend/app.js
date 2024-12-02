@@ -28,11 +28,25 @@ const pool = new Pool({
 });
 
 // Allow only your frontend's origin
+const allowedOrigins = [
+  "https://onesolutions.onrender.com",
+  "https://onesolutions-admin.onrender.com",
+];
+
 const corsOptions = {
-  origin: "https://onesolutions.onrender.com" || "https://onesolutions-admin.onrender.com", // Replace with your actual frontend URL
-  methods: ["GET", "POST", "PUT", "DELETE"],
-  credentials: true, // Allow cookies and credentials if needed
+  origin: (origin, callback) => {
+    if (allowedOrigins.includes(origin) || !origin) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+  credentials: true, // Allow credentials (cookies, headers, etc.)
 };
+
+app.options("*", cors(corsOptions));
+
 
 // Initialize Express app
 const app = express();
