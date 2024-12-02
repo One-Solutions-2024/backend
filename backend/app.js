@@ -24,7 +24,9 @@ const pool = new Pool({
   password: "MbZX1UnM4kj123mJdtctATfvAfDf9Qdt",
   port: 5432, // default PostgreSQL port
   connectionString: process.env.DATABASE_URL,
-  ssl: process.env.NODE_ENV === "production" ? { rejectUnauthorized: false } : false,
+  ssl: {
+    rejectUnauthorized: false, // This bypasses certificate verification
+  },
 });
 
 
