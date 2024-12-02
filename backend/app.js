@@ -25,11 +25,9 @@ const pool = new Pool({
   port: 5432, // default PostgreSQL port
   connectionString: process.env.DATABASE_URL,
   ssl: {
-    rejectUnauthorized: false, // This bypasses certificate verification
+    rejectUnauthorized: process.env.NODE_ENV !== 'production', // Only disable in development
   },
 });
-
-
 
 // Initialize Express app
 const app = express();
@@ -46,38 +44,30 @@ app.use("/uploads", express.static('uploads'));
 const hostname = process.env.HOSTNAME || `http://localhost:${PORT}/`;
 const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
-
-fs.mkdir("uploads",  { recursive: true })
+fs.mkdir("uploads", { recursive: true })
   .then(() => console.log("Uploads directory ensured"))
   .catch((err) => console.error("Failed to create uploads directory:", err));
 
-
-  // Set up CORS to allow all origins for image serving
-// Set up CORS for image serving
 // Set up CORS for image serving with Cache-Control headers
 app.use("/uploads", (req, res, next) => {
   res.setHeader("Access-Control-Allow-Origin", "*"); // Allow any origin
   res.setHeader("Access-Control-Allow-Methods", "GET"); // Allow only GET for static files
   res.setHeader("Access-Control-Allow-Headers", "Content-Type"); // Allow content type headers
-  
-  // Set Cache-Control headers to prevent caching
   res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate"); // No caching
   res.setHeader("Pragma", "no-cache"); // HTTP 1.0 compatibility
   res.setHeader("Expires", "0"); // No expiration
-
   next();
 });
-
-
 
 // Multer setup for file uploads
 const storage = multer.diskStorage({
   destination: "uploads",
   filename: (req, file, cb) => {
-    return cb(null, `${file.originalname}`)
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
+    cb(null, `${uniqueSuffix}-${file.originalname}`);
   }
-})
-const upload = multer({storage : storage});
+});
+const upload = multer({ storage: storage });
 
 // Middleware for rate limiting
 const limiter = rateLimit({
@@ -171,7 +161,7 @@ const initializeDbAndServer = async () => {
 // Routes for job entity
 app.get("/api/jobs", async (req, res) => {
   try {
-    const query = "SELECT * FROM job ORDER BY createdat DESC";
+    const query = "SELECT * FROM job ORDER BY createdAt DESC"; // Corrected column name
     const { rows } = await pool.query(query);
     res.json(rows);
   } catch (err) {
@@ -179,7 +169,6 @@ app.get("/api/jobs", async (req, res) => {
     res.status(500).json({ error: "Failed to fetch jobs" });
   }
 });
-
 
 // Admin Panel: Get all jobs (admin access only)
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
@@ -221,14 +210,14 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, upload.single("image
     if (!existingJob.rows.length) return res.status(404).json({ error: "Job not found" });
 
     const oldImage = existingJob.rows[0].image;
-    if (newImage && oldImage) await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(() => null);
+    if (newImage && oldImage) await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(err => console.error("Error deleting old image:", err));
 
     const query = `
       UPDATE job
       SET companyname = $1, title = $2, description = $3, apply_link = $4, image = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
       WHERE id = $13;
     `;
-    await executeQuery(query, [companyname, title, description, apply_link, newImage || oldImage, url, salary, location, job_type, experience, batch, job_uploader, id]);
+    await executeQuery(query, [companyname, title, description, apply_link, newImage || oldImage, url, salary, location, job_type, experience, batch, job_u ploader, id]);
     res.json({ message: "Job updated successfully" });
   } catch (error) {
     res.status(500).json({ error: "Failed to update job" });
@@ -243,7 +232,7 @@ app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) 
     if (!job.rows.length) return res.status(404).json({ error: "Job not found" });
 
     const imageToDelete = job.rows[0].image;
-    if (imageToDelete) await fs.unlink(path.join(__dirname, "uploads", imageToDelete)).catch(() => null);
+    if (imageToDelete) await fs.unlink(path.join(__dirname, "uploads", imageToDelete)).catch(err => console.error("Error deleting image:", err));
 
     await executeQuery("DELETE FROM job WHERE id = $1;", [id]);
     res.json({ message: "Job deleted successfully" });
@@ -274,10 +263,6 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
   }
 });
 
-
-
-
-
 // Routes for popup_content entity (similar to jobs)
 app.get("/api/popup", async (req, res) => {
   try {
@@ -293,7 +278,6 @@ app.get("/api/popup", async (req, res) => {
     res.status(500).json({ error: "Failed to retrieve popup content" });
   }
 });
-
 
 // Admin Panel: Get all popup content
 app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
@@ -334,7 +318,7 @@ app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, upload.s
     if (!existingPopup.rows.length) return res.status(404).json({ error: "Popup content not found" });
 
     const oldImage = existingPopup.rows[0].image;
-    if (newImage && oldImage) await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(() => null);
+    if (new Image && oldImage) await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(err => console.error("Error deleting old image:", err));
 
     const query = `
       UPDATE popup_content
@@ -356,7 +340,7 @@ app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async
     if (!popup.rows.length) return res.status(404).json({ error: "Popup content not found" });
 
     const imageToDelete = popup.rows[0].image;
-    if (imageToDelete) await fs.unlink(path.join(__dirname, "uploads", imageToDelete)).catch(() => null);
+    if (imageToDelete) await fs.unlink(path.join(__dirname, "uploads", imageToDelete)).catch(err => console.error("Error deleting image:", err));
 
     await executeQuery("DELETE FROM popup_content WHERE id = $1;", [id]);
     res.json({ message: "Popup content deleted successfully" });
