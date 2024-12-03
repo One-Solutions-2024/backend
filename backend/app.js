@@ -37,13 +37,8 @@ const app = express();
 // Middleware
 app.use(express.json());
 
-app.use(cors({
-  origin: "*", // Replace with the exact origin of your frontend
-  methods: ["GET", "POST"], // Allowed HTTP methods
-  allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
-  exposedHeaders: ["Content-Length"], // Headers exposed to the frontend
-  credentials: true, // Allow cookies if required
-}));
+app.use(cors({ origin: "*" }));
+
 app.use(helmet());
 app.use(morgan("combined"));
 app.use(bodyParser.json());
