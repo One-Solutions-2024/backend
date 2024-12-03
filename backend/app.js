@@ -26,9 +26,7 @@ const pool = new Pool({
   password: "MbZX1UnM4kj123mJdtctATfvAfDf9Qdt",
   port: 5432, // default PostgreSQL port
   connectionString: process.env.DATABASE_URL,
-  ssl: {
-    rejectUnauthorized: process.env.NODE_ENV !== 'production', // Only disable in development
-  },
+  
 });
 
 // Initialize Express app
@@ -37,31 +35,35 @@ const app = express();
 // Middleware
 app.use(express.json());
 
-app.use(cors({ origin: "*" }));
 
 app.use(helmet());
 app.use(morgan("combined"));
 app.use(bodyParser.json());
-app.use("/uploads", express.static('uploads'));
+// CORS Configuration
+const allowedOrigins = ["https://onesolutions.onrender.com"];
+app.use(cors({
+  origin: (origin, callback) => {
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(new Error("Not allowed by CORS"));
+    }
+  },
+  optionsSuccessStatus: 200,
+  credentials: true, // Include credentials if needed
+}));
 
 // Dynamic hostname for serving image URLs
-const hostname = process.env.HOSTNAME || `http://localhost:${PORT}/`;
+const hostname = process.env.HOSTNAME || `https://backend-lt9m.onrender.com`;
 const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
+// Static file serving for images with CORS headers
+app.use("/uploads", cors(), express.static('uploads'));
+
+// Ensure uploads directory exists
 fs.mkdir("uploads", { recursive: true })
   .then(() => console.log("Uploads directory ensured"))
   .catch((err) => console.error("Failed to create uploads directory:", err));
-
-// Set up CORS for image serving with Cache-Control headers
-app.use("/uploads", (req, res, next) => {
-  res.setHeader("Access-Control-Allow-Origin", "*"); // Allow any origin
-  res.setHeader("Access-Control-Allow-Methods", "GET"); // Allow only GET for static files
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type"); // Allow content type headers
-  res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate"); // No caching
-  res.setHeader("Pragma", "no-cache"); // HTTP 1.0 compatibility
-  res.setHeader("Expires", "0"); // No expiration
-  next();
-});
 
 // Multer setup for file uploads
 const storage = multer.diskStorage({
@@ -72,6 +74,7 @@ const storage = multer.diskStorage({
   }
 });
 const upload = multer({ storage: storage });
+
 
 // Middleware for rate limiting
 const limiter = rateLimit({
@@ -165,15 +168,17 @@ const initializeDbAndServer = async () => {
 // Routes for job entity
 app.get("/api/jobs", async (req, res) => {
   try {
-    const query = "SELECT * FROM job ORDER BY createdAt DESC"; // Corrected column name
+    const query = "SELECT * FROM job ORDER BY createdAt DESC";
     const { rows } = await pool.query(query);
+    rows.forEach(job => {
+      job.image = getImageURL(job.image);
+    });
     res.json(rows);
   } catch (err) {
     console.error("Error fetching jobs:", err.message);
     res.status(500).json({ error: "Failed to fetch jobs" });
   }
 });
-
 // Admin Panel: Get all jobs (admin access only)
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
   const getAllJobsQuery = `SELECT * FROM job ORDER BY createdAt DESC;`;
