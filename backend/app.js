@@ -261,42 +261,49 @@ app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) 
 });
 
 // Fetch job by company name and job URL
-app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
+app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
   const { companyname, url } = req.params;
 
   const getJobByCompanyNameQuery = `
-    SELECT * FROM job WHERE LOWER(companyname) = LOWER($1) AND LOWER(url) = LOWER($2);
+    SELECT * FROM job WHERE LOWER(companyname) = LOWER($1) AND LOWER(url) = LOWER($2)
   `;
 
   try {
-    const job = await pool.query(getJobByCompanyNameQuery, [companyname, url]);
+    const { rows: jobs } = await pool.query(getJobByCompanyNameQuery, [companyname, url]);
 
-    if (job.rows.length) {
-      res.json(job.rows[0]);
+    if (jobs.length > 0) {
+      const job = jobs[0];
+      job.image = getImageURL(job.image); // Ensure proper image URL
+      res.json(job);
     } else {
       res.status(404).json({ error: "Job not found" });
     }
-  } catch (error) {
-    console.error(`Error fetching job by company name and URL: ${error.message}`);
+  } catch (err) {
+    console.error(`Error fetching job by company name and URL: ${err.message}`);
     res.status(500).json({ error: "Failed to fetch job" });
   }
 });
 
+
 // Routes for popup_content entity (similar to jobs)
 app.get("/api/popup", async (req, res) => {
   try {
-    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;");
-    const popup = popupResult.rows[0];
-    if (popup) {
+    const query = "SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;";
+    const { rows } = await pool.query(query);
+
+    if (rows.length > 0) {
+      const popup = rows[0];
+      popup.image = getImageURL(popup.image); // Ensure proper image URL handling
       res.json({ popup });
     } else {
-      res.json({ popup: null });
+      res.status(404).json({ popup: null, message: "No popup content available" });
     }
   } catch (error) {
     console.error(`Error fetching popup content: ${error.message}`);
     res.status(500).json({ error: "Failed to retrieve popup content" });
   }
 });
+
 
 // Admin Panel: Get all popup content
 app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
