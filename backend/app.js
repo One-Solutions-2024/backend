@@ -36,7 +36,6 @@ const app = express();
 
 // Middleware
 app.use(express.json());
-const cors = require("cors");
 
 app.use(cors({
   origin: "http://localhost:3000", // Replace with the exact origin of your frontend
