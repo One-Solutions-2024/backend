@@ -38,7 +38,7 @@ const app = express();
 app.use(express.json());
 
 app.use(cors({
-  origin: "http://localhost:3000", // Replace with the exact origin of your frontend
+  origin: "*", // Replace with the exact origin of your frontend
   methods: ["GET", "POST"], // Allowed HTTP methods
   allowedHeaders: ["Content-Type", "Authorization"], // Allowed headers
   exposedHeaders: ["Content-Length"], // Headers exposed to the frontend
