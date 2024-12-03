@@ -46,22 +46,29 @@ app.use(bodyParser.json());
 const allowedOrigins = ["https://onesolutions.onrender.com", "https://onesolutions-admin.onrender.com"];
 app.use(cors({
   origin: (origin, callback) => {
-    if (!origin || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error("Not allowed by CORS"));
-    }
+      if (!origin || allowedOrigins.includes(origin)) {
+          callback(null, true);
+      } else {
+          callback(new Error("Not allowed by CORS"));
+      }
   },
   optionsSuccessStatus: 200,
-  credentials: true, // Include credentials if needed
+  credentials: true,
 }));
+
 
 // Dynamic hostname for serving image URLs
 const hostname = process.env.HOSTNAME || `https://backend-lt9m.onrender.com`;
 const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
-// Static file serving for images with CORS headers
-app.use("/uploads", cors(), express.static('uploads'));
+// Static file serving for images with adjusted CORS and cross-origin resource policy
+// Serve static files with proper headers for cross-origin access
+app.use("/uploads", (req, res, next) => {
+  res.header("Cross-Origin-Resource-Policy", "cross-origin");
+  res.header("Access-Control-Allow-Origin", "*");
+  next();
+}, express.static('uploads'));
+
 
 // Ensure uploads directory exists
 fs.mkdir("uploads", { recursive: true })
