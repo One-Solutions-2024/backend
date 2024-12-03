@@ -43,7 +43,7 @@ app.use(helmet());
 app.use(morgan("combined"));
 app.use(bodyParser.json());
 // CORS Configuration
-const allowedOrigins = ["https://onesolutions.onrender.com", "https://onesolutions-admin.onrender.com", "http://localhost:3000"];
+const allowedOrigins = ["https://onesolutions.onrender.com", "https://onesolutions-admin.onrender.com"];
 app.use(cors({
   origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
