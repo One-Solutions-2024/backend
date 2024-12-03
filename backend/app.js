@@ -86,13 +86,6 @@ const storage = multer.diskStorage({
 const upload = multer({ storage: storage });
 
 
-// Middleware for rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
-});
-app.use(limiter);
-
 // Middleware for JWT Authentication
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
