@@ -333,23 +333,39 @@ app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, upload.s
   const newImage = req.file ? req.file.filename : null;
 
   try {
+    // Check if the popup exists
     const existingPopup = await executeQuery("SELECT * FROM popup_content WHERE id = $1;", [id]);
-    if (!existingPopup.rows.length) return res.status(404).json({ error: "Popup content not found" });
+    if (!existingPopup.rows.length) {
+      return res.status(404).json({ error: "Popup content not found" });
+    }
 
+    // Get the old image to delete it if it's being replaced
     const oldImage = existingPopup.rows[0].image;
-    if (new Image && oldImage) await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(err => console.error("Error deleting old image:", err));
 
+    // If there's a new image and an old image, delete the old one
+    if (newImage && oldImage) {
+      await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(err => {
+        console.error("Error deleting old image:", err);
+      });
+    }
+
+    // Update query for popup content
     const query = `
       UPDATE popup_content
       SET popup_heading = $1, popup_text = $2, popup_belowtext = $3, popup_routing_link = $4, image = $5
       WHERE id = $6;
     `;
+    // Execute the query to update the popup
     await executeQuery(query, [popup_heading, popup_text, popup_belowtext, popup_routing_link, newImage || oldImage, id]);
+
+    // Send a success response
     res.json({ message: "Popup content updated successfully" });
   } catch (error) {
+    console.error("Error updating popup:", error);
     res.status(500).json({ error: "Failed to update popup content" });
   }
 });
+
 
 // Delete popup_content by ID
 app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
