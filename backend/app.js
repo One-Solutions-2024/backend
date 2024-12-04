@@ -39,8 +39,6 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 
-/
-
 // JWT Authentication
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
@@ -99,12 +97,7 @@ const initializeDbAndServer = async () => {
       );
     `);
 
-    // Check if the column exists, and add it if it doesn't
-    await pool.query(`
-      ALTER TABLE job 
-      RENAME COLUMN image to image_link;
-  `);
-
+   
 
 
     // Create popup_content table
@@ -120,11 +113,7 @@ const initializeDbAndServer = async () => {
       );
     `);
 
-    await pool.query(`
-      ALTER TABLE popup_content
-      RENAME COLUMN image to popup_link;
-  `);
-
+    
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
 
