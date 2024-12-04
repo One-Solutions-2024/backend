@@ -29,6 +29,7 @@ db.once("open", () => console.log("MongoDB connected successfully"));
 
 // MongoDB Schemas
 const jobSchema = new mongoose.Schema({
+  id: String,
   companyname: String,
   title: String,
   description: String,
@@ -46,6 +47,7 @@ const jobSchema = new mongoose.Schema({
 });
 
 const popupSchema = new mongoose.Schema({
+  id: String,
   popup_heading: String,
   popup_text: String,
   image: String,
