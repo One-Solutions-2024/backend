@@ -33,7 +33,7 @@ const jobSchema = new mongoose.Schema({
   description: String,
   apply_link: String,
   image: String,
-  url: String,
+  url_string: String,
   salary: String,
   location: String,
   job_type: String,
@@ -152,13 +152,13 @@ app.get("/api/jobs", async (req, res) => {
 });
 
 // Fetch job by company name and job URL
-app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
-  const { companyname, url } = req.params;
+app.get("/api/jobs/company/:companyname/:url_string", async (req, res) => {
+  const { companyname, url_string } = req.params;
 
   try {
     const job = await Job.findOne({
       companyname: companyname.toLowerCase(), // Case-insensitive search
-      url: url.toLowerCase(),
+      url_string: url_string.toLowerCase(),
     });
 
     if (job) {
@@ -194,12 +194,12 @@ app.post("/api/jobs/:id/view", async (req, res) => {
 
 
 app.post("/api/jobs", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
-  const { companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+  const { companyname, title, description, apply_link, url_string, salary, location, job_type, experience, batch, job_uploader } = req.body;
   const image = req.file ? req.file.filename : null;
   if (!image) return res.status(400).json({ error: "Image file is required" });
 
   try {
-    const newJob = new Job({ companyname, title, description, apply_link, image, url, salary, location, job_type, experience, batch, job_uploader });
+    const newJob = new Job({ companyname, title, description, apply_link, image, url_string, salary, location, job_type, experience, batch, job_uploader });
     await newJob.save();
     res.status(201).json({ message: "Job added successfully" });
   } catch (error) {
@@ -209,7 +209,7 @@ app.post("/api/jobs", authenticateToken, authorizeAdmin, upload.single("image"),
 
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
   const { id } = req.params;
-  const { companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+  const { companyname, title, description, apply_link, url_string, salary, location, job_type, experience, batch, job_uploader } = req.body;
   const newImage = req.file ? req.file.filename : null;
 
   try {
@@ -217,7 +217,7 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, upload.single("image
     if (!job) return res.status(404).json({ error: "Job not found" });
 
     if (newImage && job.image) await fs.unlink(path.join(__dirname, "uploads", job.image)).catch(err => console.error("Error deleting old image:", err));
-    job.set({ companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader, image: newImage || job.image });
+    job.set({ companyname, title, description, apply_link, url_string, salary, location, job_type, experience, batch, job_uploader, image: newImage || job.image });
     await job.save();
     res.json({ message: "Job updated successfully" });
   } catch (error) {
