@@ -20,6 +20,9 @@ const DEFAULT_PASSWORD = "Ekam#95423";
 // Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false, // This bypasses certificate verification
+  },
 });
 
 // Initialize Express app
