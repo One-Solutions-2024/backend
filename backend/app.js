@@ -151,6 +151,29 @@ app.get("/api/jobs", async (req, res) => {
   }
 });
 
+// Fetch job by company name and job URL
+app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
+  const { companyname, url } = req.params;
+
+  try {
+    const job = await Job.findOne({
+      companyname: companyname.toLowerCase(), // Case-insensitive search
+      url: url.toLowerCase(),
+    });
+
+    if (job) {
+      job.image = getImageURL(job.image); // Ensure proper image URL
+      res.json(job);
+    } else {
+      res.status(404).json({ error: "Job not found" });
+    }
+  } catch (err) {
+    console.error(`Error fetching job by company name and URL: ${err.message}`);
+    res.status(500).json({ error: "Failed to fetch job" });
+  }
+});
+
+
 
 app.post("/api/jobs/:id/view", async (req, res) => {
   const { id } = req.params;
@@ -230,6 +253,18 @@ app.get("/api/popup", async (req, res) => {
     res.status(500).json({ error: "Failed to retrieve popup content" });
   }
 });
+
+// Admin Panel: Get all popup content
+app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const popupContent = await PopupContent.find().sort({ created_at: -1 }); // Sorting by created_at descending
+    res.json(popupContent);
+  } catch (error) {
+    console.error(`Error fetching all popup content: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve popup content" });
+  }
+});
+
 
 app.post("/api/popup/adminpanel", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
   const { popup_heading, popup_text, popup_belowtext, popup_routing_link } = req.body;
