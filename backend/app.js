@@ -1,6 +1,8 @@
-// Required Modules
+
+
+// Import required modules
 const express = require("express");
-const mongoose = require("mongoose");
+const { Pool } = require("pg");
 const cors = require("cors");
 const helmet = require("helmet");
 const morgan = require("morgan");
@@ -9,131 +11,110 @@ const fs = require("fs").promises;
 const bodyParser = require("body-parser");
 const path = require("path");
 const multer = require("multer");
-require("dotenv").config();
+require("dotenv").config(); // Load environment variables
 
-// Configuration
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN";
 const DEFAULT_USERNAME = "Ekambaram";
 const DEFAULT_PASSWORD = "Ekam#95423";
 
-// MongoDB Connection
-mongoose.connect("mongodb+srv://ekambaram:ekam95423@cluster0.fbstm.mongodb.net/Job-Notifications" || "mongodb://localhost:27017/jobDatabase", {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
+const pool = new Pool({
+  user: "jobdatabase_hobn_user",
+  host: "dpg-ct6ltatds78s73c58jh0-a",
+  database: "jobdatabase_hobn",
+  password: "MbZX1UnM4kj123mJdtctATfvAfDf9Qdt",
+  port: 5432, // default PostgreSQL port
+  connectionString: process.env.DATABASE_URL,
+  ssl: {
+    rejectUnauthorized: false, // Use this to bypass certificate verification
+  },
+  
 });
 
-const db = mongoose.connection;
-db.on("error", console.error.bind(console, "MongoDB connection error:"));
-db.once("open", () => console.log("MongoDB connected successfully"));
-
-// MongoDB Schemas
-const jobSchema = new mongoose.Schema({
-  id: String,
-  companyname: String,
-  title: String,
-  description: String,
-  apply_link: String,
-  image: String,
-  url_string: String,
-  salary: String,
-  location: String,
-  job_type: String,
-  experience: String,
-  batch: String,
-  job_uploader: String,
-  createdAt: { type: Date, default: Date.now },
-  viewers: { type: Number, default: 0 },
-});
-
-const popupSchema = new mongoose.Schema({
-  id: String,
-  popup_heading: String,
-  popup_text: String,
-  image: String,
-  popup_belowtext: String,
-  popup_routing_link: String,
-  created_at: { type: Date, default: Date.now },
-});
-
-// Models
-const Job = mongoose.model("Job", jobSchema);
-const PopupContent = mongoose.model("PopupContent", popupSchema);
-
-// Express App
+// Initialize Express app
 const app = express();
+
+// Middleware
 app.use(express.json());
+
+
 app.use(helmet());
 app.use(morgan("combined"));
 app.use(bodyParser.json());
-
-// CORS Setup
-const allowedOrigins = [
-  "https://onesolutions.onrender.com",
-  "https://onesolutions-admin.onrender.com",
-  "http://localhost:3000",
-];
-app.use(
-  cors({
-    origin: (origin, callback) => {
+// CORS Configuration
+const allowedOrigins = ["https://onesolutions.onrender.com", "https://onesolutions-admin.onrender.com", "http://localhost:3000"];
+app.use(cors({
+  origin: (origin, callback) => {
       if (!origin || allowedOrigins.includes(origin)) {
-        callback(null, true);
+          callback(null, true);
       } else {
-        callback(new Error("Not allowed by CORS"));
+          callback(new Error("Not allowed by CORS"));
       }
-    },
-    optionsSuccessStatus: 200,
-    credentials: true,
-  })
-);
+  },
+  optionsSuccessStatus: 200,
+  credentials: true,
+}));
 
-// Dynamic Image Hostname
-const hostname = process.env.HOSTNAME || `http://localhost:${PORT}`;
+
+// Dynamic hostname for serving image URLs
+const hostname = process.env.HOSTNAME || `https://backend-lt9m.onrender.com`;
 const getImageURL = (filename) => `${hostname}/uploads/${filename}`;
 
-// Static Files and Ensure Uploads Directory
-app.use(
-  "/uploads",
-  (req, res, next) => {
-    res.header("Cross-Origin-Resource-Policy", "cross-origin");
-    res.header("Access-Control-Allow-Origin", "*");
-    next();
-  },
-  express.static("uploads")
-);
-fs.mkdir("uploads", { recursive: true }).catch((err) => console.error("Failed to create uploads directory:", err));
+// Static file serving for images with adjusted CORS and cross-origin resource policy
+// Serve static files with proper headers for cross-origin access
+app.use("/uploads", (req, res, next) => {
+  res.header("Cross-Origin-Resource-Policy", "cross-origin");
+  res.header("Access-Control-Allow-Origin", "*");
+  next();
+}, express.static('uploads'));
 
-// Multer Setup
+
+// Ensure uploads directory exists
+fs.mkdir("uploads", { recursive: true })
+  .then(() => console.log("Uploads directory ensured"))
+  .catch((err) => console.error("Failed to create uploads directory:", err));
+
+// Multer setup for file uploads
 const storage = multer.diskStorage({
   destination: "uploads",
   filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
+    const uniqueSuffix = Date.now() + '-' + Math.round(Math.random() * 1E9);
     cb(null, `${uniqueSuffix}-${file.originalname}`);
-  },
+  }
 });
 const upload = multer({ storage: storage });
 
-// JWT Middleware
+
+// Middleware for JWT Authentication
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers["authorization"];
   const token = authHeader && authHeader.split(" ")[1];
-  if (!token) return res.status(401).json({ error: "Unauthorized: No token provided" });
-
+  if (!token) return res.status(401).send("Unauthorized: No token provided");
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: "Unauthorized: Invalid token" });
+    if (err) return res.status(403).send("Unauthorized: Invalid token");
     req.user = user;
     next();
   });
 };
 
-// Admin Authorization Middleware
+// Admin Authorization
 const authorizeAdmin = (req, res, next) => {
   if (req.user && req.user.role === "admin") next();
-  else res.status(403).json({ error: "Access denied: Admins only" });
+  else res.status(403).send("Access denied: Admins only");
 };
 
-// Login Route
-app.post("/api/login", (req, res) => {
+// Utility function to execute queries
+const executeQuery = async (query, params = []) => {
+  try {
+    return await pool.query(query, params);
+  } catch (error) {
+    console.error("Database Query Error:", error.message);
+    throw new Error("Database operation failed");
+  }
+};
+
+// Login route
+app.post("/api/login", async (req, res) => {
   const { username, password } = req.body;
   if (username === DEFAULT_USERNAME && password === DEFAULT_PASSWORD) {
     const token = jwt.sign({ username, role: "admin" }, JWT_SECRET, { expiresIn: "1h" });
@@ -143,211 +124,264 @@ app.post("/api/login", (req, res) => {
   }
 });
 
-// Jobs API
+// Database initialization
+const initializeDbAndServer = async () => {
+  try {
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS job (
+        id SERIAL PRIMARY KEY,
+        companyname TEXT NOT NULL,
+        title TEXT NOT NULL,
+        description TEXT NOT NULL,
+        apply_link TEXT NOT NULL,
+        image TEXT NOT NULL,
+        url TEXT NOT NULL,
+        salary TEXT NOT NULL,
+        location TEXT NOT NULL,
+        job_type TEXT NOT NULL,
+        experience TEXT NOT NULL,
+        batch TEXT NOT NULL,
+        job_uploader TEXT NOT NULL,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
-// Get All Jobs
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS popup_content (
+        id SERIAL PRIMARY KEY,
+        popup_heading TEXT NOT NULL,
+        popup_text TEXT NOT NULL,
+        image TEXT NOT NULL,
+        popup_belowtext TEXT NOT NULL,
+        popup_routing_link TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    app.listen(PORT, () => {
+      console.log(`Server is running on http://localhost:${PORT}/`);
+    });
+  } catch (error) {
+    console.error("Error initializing database:", error.message);
+    process.exit(1);
+  }
+};
+
+// Routes for job entity
 app.get("/api/jobs", async (req, res) => {
   try {
-    const jobs = await Job.find().sort({ createdAt: -1 });
-    const jobsWithImages = jobs.map((job) => ({ ...job.toObject(), image: getImageURL(job.image) }));
-    res.json(jobsWithImages);
+    const query = "SELECT * FROM job ORDER BY createdAt DESC";
+    const { rows } = await pool.query(query);
+    rows.forEach(job => {
+      job.image = getImageURL(job.image);
+    });
+    res.json(rows);
   } catch (err) {
+    console.error("Error fetching jobs:", err.message);
     res.status(500).json({ error: "Failed to fetch jobs" });
   }
 });
+// Admin Panel: Get all jobs (admin access only)
+app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
+  const getAllJobsQuery = `SELECT * FROM job ORDER BY createdAt DESC;`;
 
-// Get Job by Company and URL String
-app.get("/api/jobs/company/:companyname/:url_string", async (req, res) => {
-  const { companyname, url_string } = req.params;
   try {
-    const job = await Job.findOne({
-      companyname: { $regex: new RegExp(`^${companyname}$`, "i") }, // Case-insensitive match
-      url_string: { $regex: new RegExp(`^${url_string}$`, "i") },  // Case-insensitive match
-    });
-    if (!job) return res.status(404).json({ error: "Job not found" });
-
-    res.json({ ...job.toObject(), image: getImageURL(job.image) });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to fetch job" });
+    const jobsArray = await pool.query(getAllJobsQuery);
+    res.send(jobsArray.rows);
+  } catch (error) {
+    console.error("Error retrieving jobs:", error);
+    res.status(500).send("An error occurred while retrieving jobs.");
   }
 });
 
-// Increment Viewers Count
-app.post("/api/jobs/:id/view", async (req, res) => {
-  const { id } = req.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "Invalid ID" });
-
-  try {
-    const job = await Job.findById(id);
-    if (!job) return res.status(404).json({ error: "Job not found" });
-
-    job.viewers += 1;
-    await job.save();
-    res.json({ message: "View count updated", viewers: job.viewers });
-  } catch (err) {
-    res.status(500).json({ error: "Failed to update view count" });
-  }
-});
-
-// Add New Job
 app.post("/api/jobs", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
-  const { companyname, title, description, apply_link, url_string, salary, location, job_type, experience, batch, job_uploader } = req.body;
-  if (!req.file) return res.status(400).json({ error: "Image file is required" });
-
-  const jobData = {
-    companyname,
-    title,
-    description,
-    apply_link,
-    url_string,
-    salary,
-    location,
-    job_type,
-    experience,
-    batch,
-    job_uploader,
-    image: req.file.filename,
-  };
+  const { companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+  const image = req.file ? req.file.filename : null;
+  if (!image) return res.status(400).json({ error: "Image file is required" });
 
   try {
-    const newJob = new Job(jobData);
-    await newJob.save();
+    const query = `
+      INSERT INTO job (companyname, title, description, apply_link, image, url, salary, location, job_type, experience, batch, job_uploader)
+      VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+    `;
+    await executeQuery(query, [companyname, title, description, apply_link, image, url, salary, location, job_type, experience, batch, job_uploader]);
     res.status(201).json({ message: "Job added successfully" });
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({ error: "Failed to add job" });
   }
 });
 
-// Update Job
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
   const { id } = req.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "Invalid ID" });
-
-  const { companyname, title, description, apply_link, url_string, salary, location, job_type, experience, batch, job_uploader } = req.body;
+  const { companyname, title, description, apply_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+  const newImage = req.file ? req.file.filename : null;
 
   try {
-    const job = await Job.findById(id);
-    if (!job) return res.status(404).json({ error: "Job not found" });
+    const existingJob = await executeQuery("SELECT * FROM job WHERE id = $1;", [id]);
+    if (!existingJob.rows.length) return res.status(404).json({ error: "Job not found" });
 
-    if (req.file) {
-      if (job.image) await fs.unlink(path.join(__dirname, "uploads", job.image));
-      job.image = req.file.filename;
-    }
+    const oldImage = existingJob.rows[0].image;
+    if (newImage && oldImage) await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(err => console.error("Error deleting old image:", err));
 
-    Object.assign(job, { companyname, title, description, apply_link, url_string, salary, location, job_type, experience, batch, job_uploader });
-    await job.save();
-
-    res.json({ message: "Job updated successfully", updated: job });
-  } catch (err) {
+    const query = `
+      UPDATE job
+      SET companyname = $1, title = $2, description = $3, apply_link = $4, image = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
+      WHERE id = $13;
+    `;
+    await executeQuery(query, [companyname, title, description, apply_link, newImage || oldImage, url, salary, location, job_type, experience, batch, job_uploader, id]);
+    res.json({ message: "Job updated successfully" });
+  } catch (error) {
     res.status(500).json({ error: "Failed to update job" });
   }
 });
 
-// Delete Job
+// Delete a job
 app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "Invalid ID" });
-
   try {
-    const job = await Job.findById(id);
-    if (!job) return res.status(404).json({ error: "Job not found" });
+    const job = await executeQuery("SELECT * FROM job WHERE id = $1;", [id]);
+    if (!job.rows.length) return res.status(404).json({ error: "Job not found" });
 
-    if (job.image) await fs.unlink(path.join(__dirname, "uploads", job.image));
-    await Job.deleteOne({ _id: id });
+    const imageToDelete = job.rows[0].image;
+    if (imageToDelete) await fs.unlink(path.join(__dirname, "uploads", imageToDelete)).catch(err => console.error("Error deleting image:", err));
 
+    await executeQuery("DELETE FROM job WHERE id = $1;", [id]);
     res.json({ message: "Job deleted successfully" });
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({ error: "Failed to delete job" });
   }
 });
 
-// Get all Popup Content
-app.get("/api/popup", async (req, res) => {
+// Fetch job by company name and job URL
+app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
+  const { companyname, url } = req.params;
+
+  const getJobByCompanyNameQuery = `
+    SELECT * FROM job WHERE LOWER(companyname) = LOWER($1) AND LOWER(url) = LOWER($2)
+  `;
+
   try {
-    const content = await PopupContent.find().sort({ created_at: -1 });
-    res.json(content);
+    const { rows: jobs } = await pool.query(getJobByCompanyNameQuery, [companyname, url]);
+
+    if (jobs.length > 0) {
+      const job = jobs[0];
+      job.image = getImageURL(job.image); // Ensure proper image URL
+      res.json(job);
+    } else {
+      res.status(404).json({ error: "Job not found" });
+    }
   } catch (err) {
-    res.status(500).json({ error: "Failed to fetch popup content" });
+    console.error(`Error fetching job by company name and URL: ${err.message}`);
+    res.status(500).json({ error: "Failed to fetch job" });
   }
 });
 
-// Add New Popup Content
-app.post("/api/popup", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
-  const { popup_heading, popup_text, popup_belowtext, popup_routing_link } = req.body;
-  if (!req.file) return res.status(400).json({ error: "Image file is required" });
 
-  const popupData = {
-    popup_heading,
-    popup_text,
-    popup_belowtext,
-    popup_routing_link,
-    image: req.file.filename,
-  };
+// Routes for popup_content entity (similar to jobs)
+app.get("/api/popup", async (req, res) => {
+  try {
+    const query = "SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;";
+    const { rows } = await pool.query(query);
+
+    if (rows.length > 0) {
+      const popup = rows[0];
+      popup.image = getImageURL(popup.image); // Ensure proper image URL handling
+      res.json({ popup });
+    } else {
+      res.status(404).json({ popup: null, message: "No popup content available" });
+    }
+  } catch (error) {
+    console.error(`Error fetching popup content: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve popup content" });
+  }
+});
+
+
+// Admin Panel: Get all popup content
+app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC;");
+    res.json(popupResult.rows);
+  } catch (error) {
+    console.error(`Error fetching all popup content: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve popup content" });
+  }
+});
+
+app.post("/api/popup/adminpanel", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
+  const { popup_heading, popup_text, popup_belowtext, popup_routing_link } = req.body;
+  const image = req.file ? req.file.filename : null;
+  if (!image) return res.status(400).json({ error: "Image file is required" });
 
   try {
-    const newPopup = new PopupContent(popupData);
-    await newPopup.save();
+    const query = `
+      INSERT INTO popup_content (popup_heading, popup_text, image, popup_belowtext, popup_routing_link)
+      VALUES ($1, $2, $3, $4, $5);
+    `;
+    await executeQuery(query, [popup_heading, popup_text, image, popup_belowtext, popup_routing_link]);
     res.status(201).json({ message: "Popup content added successfully" });
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({ error: "Failed to add popup content" });
   }
 });
 
-// Update Popup Content
-app.put("/api/popup/:id", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
+// Update popup_content by ID
+app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, upload.single("image"), async (req, res) => {
   const { id } = req.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) {
-    return res.status(400).json({ error: "Invalid ID" });
-  }
-
   const { popup_heading, popup_text, popup_belowtext, popup_routing_link } = req.body;
+  const newImage = req.file ? req.file.filename : null;
 
   try {
-    const popup = await PopupContent.findById(id);
-    if (!popup) {
+    // Check if the popup exists
+    const existingPopup = await executeQuery("SELECT * FROM popup_content WHERE id = $1;", [id]);
+    if (!existingPopup.rows.length) {
       return res.status(404).json({ error: "Popup content not found" });
     }
 
-    // Replace the image if a new one is provided
-    if (req.file) {
-      if (popup.image) {
-        await fs.unlink(path.join(__dirname, "uploads", popup.image));
-      }
-      popup.image = req.file.filename;
+    // Get the old image to delete it if it's being replaced
+    const oldImage = existingPopup.rows[0].image;
+
+    // If there's a new image and an old image, delete the old one
+    if (newImage && oldImage) {
+      await fs.unlink(path.join(__dirname, "uploads", oldImage)).catch(err => {
+        console.error("Error deleting old image:", err);
+      });
     }
 
-    // Update fields
-    if (popup_heading) popup.popup_heading = popup_heading;
-    if (popup_text) popup.popup_text = popup_text;
-    if (popup_belowtext) popup.popup_belowtext = popup_belowtext;
-    if (popup_routing_link) popup.popup_routing_link = popup_routing_link;
+    // Update query for popup content
+    const query = `
+      UPDATE popup_content
+      SET popup_heading = $1, popup_text = $2, popup_belowtext = $3, popup_routing_link = $4, image = $5
+      WHERE id = $6;
+    `;
+    // Execute the query to update the popup
+    await executeQuery(query, [popup_heading, popup_text, popup_belowtext, popup_routing_link, newImage || oldImage, id]);
 
-    await popup.save();
-    res.json({ message: "Popup content updated successfully", updated: popup });
-  } catch (err) {
+    // Send a success response
+    res.json({ message: "Popup content updated successfully" });
+  } catch (error) {
+    console.error("Error updating popup:", error);
     res.status(500).json({ error: "Failed to update popup content" });
   }
 });
 
-// Delete Popup Content
-app.delete("/api/popup/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+
+// Delete popup_content by ID
+app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
-  if (!mongoose.Types.ObjectId.isValid(id)) return res.status(400).json({ error: "Invalid ID" });
-
   try {
-    const popup = await PopupContent.findById(id);
-    if (!popup) return res.status(404).json({ error: "Popup content not found" });
+    const popup = await executeQuery("SELECT * FROM popup_content WHERE id = $1;", [id]);
+    if (!popup.rows.length) return res.status(404).json({ error: "Popup content not found" });
 
-    if (popup.image) await fs.unlink(path.join(__dirname, "uploads", popup.image));
-    await PopupContent.deleteOne({ _id: id });
+    const imageToDelete = popup.rows[0].image;
+    if (imageToDelete) await fs.unlink(path.join(__dirname, "uploads", imageToDelete)).catch(err => console.error("Error deleting image:", err));
 
+    await executeQuery("DELETE FROM popup_content WHERE id = $1;", [id]);
     res.json({ message: "Popup content deleted successfully" });
-  } catch (err) {
+  } catch (error) {
     res.status(500).json({ error: "Failed to delete popup content" });
   }
 });
 
-// Start Server
-app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
-});
+// Start server
+initializeDbAndServer(); change database postgresql into mongoose in this
