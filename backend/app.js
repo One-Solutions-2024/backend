@@ -45,6 +45,8 @@ const jobSchema = new mongoose.Schema({
 
 });
 
+
+
 const popupSchema = new mongoose.Schema({
   popup_heading: String,
   popup_text: String,
@@ -58,6 +60,39 @@ const popupSchema = new mongoose.Schema({
 const Job = mongoose.model("Job", jobSchema);
 const PopupContent = mongoose.model("PopupContent", popupSchema);
 
+async function migrateJobs() {
+  try {
+    // Connect to MongoDB
+    mongoose.connect("mongodb+srv://ekambaram:ekam95423@cluster0.fbstm.mongodb.net/Job-Notifications" || "mongodb://localhost:27017/jobDatabase", {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+    });
+
+    // Find jobs where the "url" field exists and rename it to "url_string"
+    const jobsToUpdate = await Job.find({ url: { $exists: true } });
+    console.log(`Found ${jobsToUpdate.length} jobs to update.`);
+
+    for (const job of jobsToUpdate) {
+      if (job.url) {
+        // Rename field from "url" to "url_string"
+        job.url_string = job.url;
+        delete job.url; // Remove old "url" field
+
+        // Save the updated job document
+        await job.save();
+        console.log(`Job ${job._id} updated.`);
+      }
+    }
+
+    console.log("Migration completed successfully.");
+  } catch (error) {
+    console.error("Error during migration:", error);
+  } finally {
+    mongoose.connection.close();
+  }
+}
+
+migrateJobs();
 // Initialize Express app
 const app = express();
 
