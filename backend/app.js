@@ -96,11 +96,20 @@ const initializeDbAndServer = async () => {
         experience TEXT NOT NULL,
         batch TEXT NOT NULL,
         job_uploader TEXT NOT NULL,
+        ip_address TEXT NOT NULL,
+        viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
-   
+    await pool.query(`
+      ALTER TABLE job
+      ADD COLUMN IF NOT EXISTS ip_address TEXT,
+      ADD COLUMN IF NOT EXISTS viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+    `);
+    
+
+
 
 
     // Create popup_content table
@@ -116,7 +125,7 @@ const initializeDbAndServer = async () => {
       );
     `);
 
-    
+
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
 
@@ -348,6 +357,57 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch job" });
   }
 });
+
+// Middleware to get the client's IP address
+const getClientIp = (req) => {
+  const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+  return ip.replace(/^.*:/, ""); // Simplify IPv6 addresses
+};
+
+// Route to record a viewer for a job
+app.post("/api/jobs/:id/view", async (req, res) => {
+  const { id } = req.params; // Job ID
+  const ipAddress = getClientIp(req);
+
+  try {
+    // Check if the IP has already viewed the job
+    const existingViewerQuery = `
+      SELECT * FROM job_viewers WHERE job_id = $1 AND ip_address = $2;
+    `;
+    const existingViewer = await pool.query(existingViewerQuery, [id, ipAddress]);
+
+    if (existingViewer.rows.length === 0) {
+      // Insert new viewer
+      const insertViewerQuery = `
+        INSERT INTO job_viewers (job_id, ip_address) VALUES ($1, $2);
+      `;
+      await pool.query(insertViewerQuery, [id, ipAddress]);
+    }
+
+    res.status(200).json({ message: "View recorded successfully" });
+  } catch (error) {
+    console.error(`Error recording job view: ${error.message}`);
+    res.status(500).json({ error: "Failed to record view" });
+  }
+});
+
+// Route to get the list of viewers for a job
+app.get("/api/jobs/:id/viewers", async (req, res) => {
+  const { id } = req.params; // Job ID
+
+  try {
+    const viewersQuery = `
+      SELECT ip_address, viewed_at FROM job_viewers WHERE job_id = $1 ORDER BY viewed_at DESC;
+    `;
+    const viewers = await pool.query(viewersQuery, [id]);
+
+    res.json(viewers.rows);
+  } catch (error) {
+    console.error(`Error fetching job viewers: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve viewers" });
+  }
+});
+
 // Fetch the latest popup content
 app.get("/api/popup", async (req, res) => {
   try {
