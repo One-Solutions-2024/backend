@@ -28,6 +28,11 @@ const pool = new Pool({
 // Initialize Express app
 const app = express();
 
+const getClientIp = (req) => {
+  const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+  return ip.split(",")[0].trim(); // Handles proxies and IPv6
+};
+
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -96,25 +101,29 @@ const initializeDbAndServer = async () => {
         experience TEXT NOT NULL,
         batch TEXT NOT NULL,
         job_uploader TEXT NOT NULL,
-        ip_address TEXT NOT NULL,
-        viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
 
     await pool.query(`
-      ALTER TABLE job
-      ADD COLUMN IF NOT EXISTS ip_address TEXT,
-      ADD COLUMN IF NOT EXISTS viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP;
+     DELETE FROM job
+      WHERE ip_address IS NULL OR NOT NULL
+        AND viewed_at IS NULL OR NOT NULL;
     `);
-    
 
-
-
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS job_viewers (
+        id SERIAL PRIMARY KEY,
+        job_id INT NOT NULL REFERENCES job(id),
+        ip_address TEXT NOT NULL,
+        viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE (job_id, ip_address)
+    );
+    `);
 
     // Create popup_content table
     await pool.query(`
-            CREATE TABLE IF NOT EXISTS popup_content (
+          CREATE TABLE IF NOT EXISTS popup_content (
           id SERIAL PRIMARY KEY,
           popup_heading TEXT NOT NULL,
           popup_text TEXT NOT NULL,
@@ -358,32 +367,20 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
   }
 });
 
-// Middleware to get the client's IP address
-const getClientIp = (req) => {
-  const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-  return ip.replace(/^.*:/, ""); // Simplify IPv6 addresses
-};
 
-// Route to record a viewer for a job
+
 app.post("/api/jobs/:id/view", async (req, res) => {
-  const { id } = req.params; // Job ID
+  const { id } = req.params;
   const ipAddress = getClientIp(req);
 
   try {
-    // Check if the IP has already viewed the job
-    const existingViewerQuery = `
-      SELECT * FROM job_viewers WHERE job_id = $1 AND ip_address = $2;
-    `;
-    const existingViewer = await pool.query(existingViewerQuery, [id, ipAddress]);
-
-    if (existingViewer.rows.length === 0) {
-      // Insert new viewer
-      const insertViewerQuery = `
-        INSERT INTO job_viewers (job_id, ip_address) VALUES ($1, $2);
+    const query = `
+          INSERT INTO job_viewers (job_id, ip_address, viewed_at)
+          VALUES ($1, $2, CURRENT_TIMESTAMP)
+          ON CONFLICT (job_id, ip_address)
+          DO UPDATE SET viewed_at = CURRENT_TIMESTAMP;
       `;
-      await pool.query(insertViewerQuery, [id, ipAddress]);
-    }
-
+    await pool.query(query, [id, ipAddress]);
     res.status(200).json({ message: "View recorded successfully" });
   } catch (error) {
     console.error(`Error recording job view: ${error.message}`);
@@ -391,22 +388,24 @@ app.post("/api/jobs/:id/view", async (req, res) => {
   }
 });
 
-// Route to get the list of viewers for a job
 app.get("/api/jobs/:id/viewers", async (req, res) => {
-  const { id } = req.params; // Job ID
+  const { id } = req.params;
 
   try {
-    const viewersQuery = `
-      SELECT ip_address, viewed_at FROM job_viewers WHERE job_id = $1 ORDER BY viewed_at DESC;
-    `;
-    const viewers = await pool.query(viewersQuery, [id]);
-
-    res.json(viewers.rows);
+    const query = `
+          SELECT COUNT(DISTINCT ip_address) AS viewer_count
+          FROM job_viewers
+          WHERE job_id = $1;
+      `;
+    const result = await pool.query(query, [id]);
+    res.json({ viewer_count: result.rows[0].viewer_count });
   } catch (error) {
-    console.error(`Error fetching job viewers: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve viewers" });
+    console.error(`Error fetching viewers count: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve viewer count" });
   }
 });
+
+
 
 // Fetch the latest popup content
 app.get("/api/popup", async (req, res) => {
