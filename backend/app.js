@@ -340,7 +340,7 @@ app.post(
 );
 
 // Fetch job by company name and job URL
-app.get('/api/jobs/:companyname/:url', async (req, res) => {
+app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
   const { companyname, url } = req.params;
 
   const getJobByCompanyNameQuery = `
