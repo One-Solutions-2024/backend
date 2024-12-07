@@ -106,12 +106,6 @@ const initializeDbAndServer = async () => {
     `);
 
     await pool.query(`
-     DELETE FROM job
-      WHERE ip_address IS NULL OR NOT NULL
-        AND viewed_at IS NULL OR NOT NULL;
-    `);
-
-    await pool.query(`
       CREATE TABLE IF NOT EXISTS job_viewers (
         id SERIAL PRIMARY KEY,
         job_id INT NOT NULL REFERENCES job(id),
