@@ -317,15 +317,11 @@ const initializeDbAndServer = async () => {
   }
 };
 
-// Route to get own admin details
+// Route to get admin details without authentication
 app.get("/api/admin/details", async (req, res) => {
   try {
-    const adminId = req.user.id;
-
-    // Check if the user ID exists
-    if (!adminId) {
-      return res.status(400).json({ error: "User ID not found" });
-    }
+    // Directly fetching the admin's details, assuming admin id is known or statically set for now
+    const adminId = 1;  // Replace with a static value or logic to get admin's ID (as no auth required)
 
     const adminQuery = `
       SELECT id, adminname, username, phone, admin_image_link, createdAt 
@@ -337,80 +333,44 @@ app.get("/api/admin/details", async (req, res) => {
       return res.status(404).json({ error: "Admin not found" });
     }
 
-    res.json({ admin: adminResult.rows[0] });
+    res.json(adminResult.rows[0]);
   } catch (error) {
     console.error(`Error fetching admin details: ${error.message}`);
     res.status(500).json({ error: "Failed to retrieve admin details" });
   }
 });
+// Route to update admin details without authentication
+app.put("/api/admin/details", async (req, res) => {
+  const { adminname, username, phone, admin_image_link } = req.body;
 
+  try {
+    // Directly updating the admin's details
+    const adminId = 1; // Use the static value for admin ID (as no auth required)
 
-// Route to update own admin details
-app.put(
-  "/api/admin/details",
-  [
-    body("adminname").optional().notEmpty(),
-    body("username").optional().notEmpty(),
-    body("password").optional().isLength({ min: 6 }),
-    body("phone").optional().isMobilePhone(),
-    body("admin_image_link").optional().isURL(),
-  ],
-  async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const updateAdminQuery = `
+      UPDATE admin 
+      SET adminname = $1, username = $2, phone = $3, admin_image_link = $4
+      WHERE id = $5;
+    `;
+    
+    const result = await pool.query(updateAdminQuery, [
+      adminname,
+      username,
+      phone,
+      admin_image_link,
+      adminId
+    ]);
 
-    const adminId = req.user.id;
-    const { adminname, username, password, phone, admin_image_link } = req.body;
-
-    try {
-      const updateFields = [];
-      const values = [];
-      let valueIndex = 1;
-
-      if (adminname) {
-        updateFields.push(`adminname = $${valueIndex++}`);
-        values.push(adminname);
-      }
-      if (username) {
-        updateFields.push(`username = $${valueIndex++}`);
-        values.push(username);
-      }
-      if (password) {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        updateFields.push(`password = $${valueIndex++}`);
-        values.push(hashedPassword);
-      }
-      if (phone) {
-        updateFields.push(`phone = $${valueIndex++}`);
-        values.push(phone);
-      }
-      if (admin_image_link) {
-        updateFields.push(`admin_image_link = $${valueIndex++}`);
-        values.push(admin_image_link);
-      }
-
-      if (!updateFields.length) {
-        return res.status(400).json({ error: "No fields to update" });
-      }
-
-      values.push(adminId);
-      const updateAdminQuery = `
-        UPDATE admin SET ${updateFields.join(", ")}
-        WHERE id = $${valueIndex};
-      `;
-      
-      console.log("Update query:", updateAdminQuery);  // Log the query
-      console.log("Values:", values);  // Log the values
-
-      await pool.query(updateAdminQuery, values);
-
-      res.json({ message: "Admin details updated successfully" });
-    } catch (error) {
-      console.error(`Error updating admin details: ${error.message}`);
-      res.status(500).json({ error: "Failed to update admin details" });
+    if (result.rowCount === 0) {
+      return res.status(404).json({ error: "Admin not found" });
     }
+
+    res.json({ message: "Admin details updated successfully" });
+  } catch (error) {
+    console.error(`Error updating admin details: ${error.message}`);
+    res.status(500).json({ error: "Failed to update admin details" });
   }
-);
+});
 
 
 // Route to get all jobs with pagination
