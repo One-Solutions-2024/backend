@@ -317,60 +317,74 @@ const initializeDbAndServer = async () => {
   }
 };
 
-// Route to get admin details without authentication
-app.get("/api/admin/details", async (req, res) => {
-  try {
-    // Directly fetching the admin's details, assuming admin id is known or statically set for now
-    const adminId = 1;  // Replace with a static value or logic to get admin's ID (as no auth required)
+// Update admin details
+app.put("/api/admin/me", authenticateToken, [
+  body("adminname").optional().notEmpty(),
+  body("phone").optional().isMobilePhone(),
+  body("admin_image_link").optional().isURL(),
+], async (req, res) => {
+  const { adminname, phone, admin_image_link } = req.body;
+  const adminId = req.user.id;  // Extract admin ID from the token
 
-    const adminQuery = `
-      SELECT id, adminname, username, phone, admin_image_link, createdAt 
-      FROM admin WHERE id = $1;
-    `;
-    const adminResult = await pool.query(adminQuery, [adminId]);
-
-    if (!adminResult.rows.length) {
-      return res.status(404).json({ error: "Admin not found" });
-    }
-
-    res.json(adminResult.rows[0]);
-  } catch (error) {
-    console.error(`Error fetching admin details: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve admin details" });
+  // Validate incoming data
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
   }
-});
-// Route to update admin details without authentication
-app.put("/api/admin/details", async (req, res) => {
-  const { adminname, username, phone, admin_image_link } = req.body;
 
   try {
-    // Directly updating the admin's details
-    const adminId = 1; // Use the static value for admin ID (as no auth required)
+    // Update the admin's details only if provided
+    let updateQuery = "UPDATE admin SET ";
+    let values = [];
+    let setQuery = [];
 
-    const updateAdminQuery = `
-      UPDATE admin 
-      SET adminname = $1, username = $2, phone = $3, admin_image_link = $4
-      WHERE id = $5;
-    `;
-    
-    const result = await pool.query(updateAdminQuery, [
-      adminname,
-      username,
-      phone,
-      admin_image_link,
-      adminId
-    ]);
-
-    if (result.rowCount === 0) {
-      return res.status(404).json({ error: "Admin not found" });
+    if (adminname) {
+      setQuery.push("adminname = $1");
+      values.push(adminname);
+    }
+    if (phone) {
+      setQuery.push("phone = $2");
+      values.push(phone);
+    }
+    if (admin_image_link) {
+      setQuery.push("admin_image_link = $3");
+      values.push(admin_image_link);
     }
 
+    if (setQuery.length === 0) {
+      return res.status(400).json({ error: "No fields to update" });
+    }
+
+    updateQuery += setQuery.join(", ") + " WHERE id = $" + (values.length + 1);
+    values.push(adminId);
+
+    await pool.query(updateQuery, values);
     res.json({ message: "Admin details updated successfully" });
   } catch (error) {
     console.error(`Error updating admin details: ${error.message}`);
     res.status(500).json({ error: "Failed to update admin details" });
   }
 });
+// Get logged-in admin details
+app.get("/api/admin/me", authenticateToken, async (req, res) => {
+  const adminId = req.user.id;  // Extract admin ID from the token
+
+  try {
+    const query = "SELECT adminname, username, phone, admin_image_link FROM admin WHERE id = $1";
+    const result = await pool.query(query, [adminId]);
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    const admin = result.rows[0];
+    res.json({ admin });
+  } catch (error) {
+    console.error(`Error fetching admin details: ${error.message}`);
+    res.status(500).json({ error: "Failed to fetch admin details" });
+  }
+});
+
 
 
 // Route to get all jobs with pagination
