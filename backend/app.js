@@ -8,6 +8,7 @@ const { body, validationResult } = require("express-validator");
 const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
+const bcrypt = require("bcrypt");
 require("dotenv").config(); // Load environment variables
 
 const PORT = process.env.PORT || 5000;
