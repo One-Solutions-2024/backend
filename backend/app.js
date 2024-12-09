@@ -322,6 +322,11 @@ app.get("/api/admin/details", async (req, res) => {
   try {
     const adminId = req.user.id;
 
+    // Check if the user ID exists
+    if (!adminId) {
+      return res.status(400).json({ error: "User ID not found" });
+    }
+
     const adminQuery = `
       SELECT id, adminname, username, phone, admin_image_link, createdAt 
       FROM admin WHERE id = $1;
@@ -339,16 +344,16 @@ app.get("/api/admin/details", async (req, res) => {
   }
 });
 
+
 // Route to update own admin details
 app.put(
   "/api/admin/details",
-  
   [
     body("adminname").optional().notEmpty(),
     body("username").optional().notEmpty(),
     body("password").optional().isLength({ min: 6 }),
     body("phone").optional().isMobilePhone(),
-    body("admin_image_link").isURL(),
+    body("admin_image_link").optional().isURL(),
   ],
   async (req, res) => {
     const errors = validationResult(req);
@@ -393,6 +398,10 @@ app.put(
         UPDATE admin SET ${updateFields.join(", ")}
         WHERE id = $${valueIndex};
       `;
+      
+      console.log("Update query:", updateAdminQuery);  // Log the query
+      console.log("Values:", values);  // Log the values
+
       await pool.query(updateAdminQuery, values);
 
       res.json({ message: "Admin details updated successfully" });
@@ -402,6 +411,7 @@ app.put(
     }
   }
 );
+
 
 // Route to get all jobs with pagination
 app.get("/api/jobs", async (req, res) => {
