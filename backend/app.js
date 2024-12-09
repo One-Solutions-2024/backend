@@ -318,7 +318,7 @@ const initializeDbAndServer = async () => {
 };
 
 // Route to get own admin details
-app.get("/api/admin/details", authenticateToken, authorizeAdmin, async (req, res) => {
+app.get("/api/admin/details", async (req, res) => {
   try {
     const adminId = req.user.id;
 
@@ -342,14 +342,13 @@ app.get("/api/admin/details", authenticateToken, authorizeAdmin, async (req, res
 // Route to update own admin details
 app.put(
   "/api/admin/details",
-  authenticateToken,
-  authorizeAdmin,
+  
   [
     body("adminname").optional().notEmpty(),
     body("username").optional().notEmpty(),
     body("password").optional().isLength({ min: 6 }),
     body("phone").optional().isMobilePhone(),
-    body("admin_image_link").optional().isURL(),
+    body("admin_image_link").isURL(),
   ],
   async (req, res) => {
     const errors = validationResult(req);
