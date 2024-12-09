@@ -282,9 +282,25 @@ const initializeDbAndServer = async () => {
     // Check if there are any admins in the table
     const adminCountResult = await pool.query("SELECT COUNT(*) as count FROM admin;");
     const adminCount = adminCountResult.rows[0].count;
-
     if (adminCount == 0) {
-      console.log("No admins found. Admin registration is open.");
+      const data = await fs.readFile("admin.json", "utf8");
+      const adminList = JSON.parse(data);
+
+      const insertAdminQuery = `
+         INSERT INTO admin (adminname, username, password, phone, admin_image_link)
+         VALUES ($1, $2, $3, $4, $5);
+       `;
+
+      for (const admin of adminList) {
+        await pool.query(insertAdminQuery, [
+          admin.adminname,
+          admin.username,
+          admin.password,
+          admin.phone,
+          admin.admin_image_link,
+        ]);
+      }
+      console.log("Admin data has been imported successfully.");
     }
 
 

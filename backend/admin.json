@@ -1,0 +1,21 @@
+[
+    {
+      "id": 1,
+      "adminname": "John Admin",
+      "username": "john_admin",
+      "password": "securepassword123",
+      "phone": "+1234567890",
+      "admin_image_link": "https://example.com/images/john_admin.jpg",
+      "createdAt": "2024-12-09T10:30:00Z"
+    },
+    {
+      "id": 2,
+      "adminname": "Jane Manager",
+      "username": "jane_manager",
+      "password": "password456secure",
+      "phone": "+1987654321",
+      "admin_image_link": "https://example.com/images/jane_manager.png",
+      "createdAt": "2024-12-09T11:00:00Z"
+    }
+  ]
+  
