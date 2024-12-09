@@ -13,9 +13,6 @@ require("dotenv").config(); // Load environment variables
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
 
-// Default admin credentials
-const DEFAULT_USERNAME = "Ekambaram";
-const DEFAULT_PASSWORD = "Ekam#95423";
 
 // Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
@@ -46,41 +43,116 @@ const corsOptions = {
 };
 app.use(cors(corsOptions));
 
-
-// JWT Authentication
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-  if (!token) return res.status(401).send("Unauthorized: No token provided");
-  jwt.verify(token, JWT_SECRET, (error, user) => {
-    if (error) return res.status(403).send("Unauthorized: Invalid token");
-    req.user = user;
-    next();
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+
+  if (!token) return res.status(401).json({ error: "Token required" });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (err) return res.status(403).json({ error: "Invalid token" });
+      req.user = user; // Save decoded token data (e.g., user id and role)
+      next();
   });
 };
-
-// Admin Authorization
 const authorizeAdmin = (req, res, next) => {
-  if (req.user && req.user.role === "admin") next();
-  else res.status(403).send("Access denied: Admins only");
+  if (req.user.role !== "admin") {
+      return res.status(403).json({ error: "Admin access required" });
+  }
+  next();
 };
 
 
+// Route for admin registration
+app.post(
+  "/api/admin/register",
+  [
+    body("adminname").notEmpty(),
+    body("username").notEmpty(),
+    body("password").isLength({ min: 6 }),
+    body("phone").isMobilePhone(),
+    body("admin_image_link").isURL(),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
+    const { adminname, username, password, phone, admin_image_link } = req.body;
 
+    try {
+      // Check if username or phone already exists
+      const existingAdmin = await pool.query(
+        "SELECT * FROM admin WHERE username = $1 OR phone = $2;",
+        [username, phone]
+      );
+      if (existingAdmin.rows.length) {
+        return res.status(400).json({ error: "Admin with this username or phone already exists" });
+      }
 
-// Login route
-app.post("/api/login", async (req, res) => {
+      // Hash the password before saving
+      const hashedPassword = await bcrypt.hash(password, 10);
+
+      const insertAdminQuery = `
+        INSERT INTO admin (adminname, username, password, phone, admin_image_link)
+        VALUES ($1, $2, $3, $4, $5) RETURNING id;
+      `;
+      const newAdmin = await pool.query(insertAdminQuery, [
+        adminname,
+        username,
+        hashedPassword,
+        phone,
+        admin_image_link || null,
+      ]);
+      res.status(201).json({ message: "Admin registered successfully", adminId: newAdmin.rows[0].id });
+    } catch (error) {
+      console.error(`Error registering admin: ${error.message}`);
+      res.status(500).json({ error: "Failed to register admin" });
+    }
+  }
+);
+
+// Route for admin login
+app.post("/api/admin/login", async (req, res) => {
   const { username, password } = req.body;
-  if (username === DEFAULT_USERNAME && password === DEFAULT_PASSWORD) {
-    const token = jwt.sign({ username, role: "admin" }, JWT_SECRET, {
+
+  try {
+    // Check if admin exists
+    const adminQuery = "SELECT * FROM admin WHERE username = $1;";
+    const adminResult = await pool.query(adminQuery, [username]);
+
+    if (!adminResult.rows.length) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    const admin = adminResult.rows[0];
+
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, admin.password);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Invalid username or password" });
+    }
+
+    // Generate JWT
+    const token = jwt.sign({ id: admin.id, username: admin.username, role: "admin" }, JWT_SECRET, {
       expiresIn: "1h",
     });
-    res.json({ message: "Login successful", token });
-  } else {
-    res.status(401).json({ error: "Invalid username or password" });
+
+    res.json({
+      message: "Login successful",
+      token,
+      admin: {
+        adminname: admin.adminname,
+        username: admin.username,
+        phone: admin.phone,
+        admin_image_link: admin.admin_image_link,
+      },
+    });
+  } catch (error) {
+    console.error(`Error during admin login: ${error.message}`);
+    res.status(500).json({ error: "Failed to log in" });
   }
 });
+
 
 
 // Initialize DB and start server
@@ -192,8 +264,27 @@ const initializeDbAndServer = async () => {
           job.job_uploader,
         ]);
       }
-
       console.log("Job data has been imported successfully.");
+    }
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin (
+        id SERIAL PRIMARY KEY,
+        adminname TEXT NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        phone TEXT UNIQUE NOT NULL,
+        admin_image_link TEXT,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    // Check if there are any admins in the table
+    const adminCountResult = await pool.query("SELECT COUNT(*) as count FROM admin;");
+    const adminCount = adminCountResult.rows[0].count;
+
+    if (adminCount == 0) {
+      console.log("No admins found. Admin registration is open.");
     }
 
 
