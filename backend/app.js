@@ -316,6 +316,94 @@ const initializeDbAndServer = async () => {
     process.exit(1);
   }
 };
+
+// Route to get own admin details
+app.get("/api/admin/details", authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const adminId = req.user.id;
+
+    const adminQuery = `
+      SELECT id, adminname, username, phone, admin_image_link, createdAt 
+      FROM admin WHERE id = $1;
+    `;
+    const adminResult = await pool.query(adminQuery, [adminId]);
+
+    if (!adminResult.rows.length) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    res.json({ admin: adminResult.rows[0] });
+  } catch (error) {
+    console.error(`Error fetching admin details: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve admin details" });
+  }
+});
+
+// Route to update own admin details
+app.put(
+  "/api/admin/details",
+  authenticateToken,
+  authorizeAdmin,
+  [
+    body("adminname").optional().notEmpty(),
+    body("username").optional().notEmpty(),
+    body("password").optional().isLength({ min: 6 }),
+    body("phone").optional().isMobilePhone(),
+    body("admin_image_link").optional().isURL(),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const adminId = req.user.id;
+    const { adminname, username, password, phone, admin_image_link } = req.body;
+
+    try {
+      const updateFields = [];
+      const values = [];
+      let valueIndex = 1;
+
+      if (adminname) {
+        updateFields.push(`adminname = $${valueIndex++}`);
+        values.push(adminname);
+      }
+      if (username) {
+        updateFields.push(`username = $${valueIndex++}`);
+        values.push(username);
+      }
+      if (password) {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        updateFields.push(`password = $${valueIndex++}`);
+        values.push(hashedPassword);
+      }
+      if (phone) {
+        updateFields.push(`phone = $${valueIndex++}`);
+        values.push(phone);
+      }
+      if (admin_image_link) {
+        updateFields.push(`admin_image_link = $${valueIndex++}`);
+        values.push(admin_image_link);
+      }
+
+      if (!updateFields.length) {
+        return res.status(400).json({ error: "No fields to update" });
+      }
+
+      values.push(adminId);
+      const updateAdminQuery = `
+        UPDATE admin SET ${updateFields.join(", ")}
+        WHERE id = $${valueIndex};
+      `;
+      await pool.query(updateAdminQuery, values);
+
+      res.json({ message: "Admin details updated successfully" });
+    } catch (error) {
+      console.error(`Error updating admin details: ${error.message}`);
+      res.status(500).json({ error: "Failed to update admin details" });
+    }
+  }
+);
+
 // Route to get all jobs with pagination
 app.get("/api/jobs", async (req, res) => {
   const { page = 1, limit = 8 } = req.query;
