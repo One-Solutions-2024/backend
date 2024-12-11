@@ -318,7 +318,7 @@ const initializeDbAndServer = async () => {
 };
 
 // Update admin details
-app.put("/api/admin/me", authenticateToken, [
+app.put("/api/admin/me", authenticateToken, authorizeAdmin, [
   body("adminname").optional().notEmpty(),
   body("phone").optional().isMobilePhone(),
   body("admin_image_link").optional().isURL(),
@@ -366,7 +366,7 @@ app.put("/api/admin/me", authenticateToken, [
   }
 });
 // Get logged-in admin details
-app.get("/api/admin/me", authenticateToken, async (req, res) => {
+app.get("/api/admin/me", authenticateToken, authorizeAdmin, async (req, res) => {
   const adminId = req.user.id;  // Extract admin ID from the token
 
   try {
@@ -384,6 +384,18 @@ app.get("/api/admin/me", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch admin details" });
   }
 });
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
