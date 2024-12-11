@@ -275,7 +275,7 @@ const initializeDbAndServer = async () => {
         adminname TEXT NOT NULL,
         username TEXT UNIQUE NOT NULL,
         password TEXT NOT NULL,
-        phone TEXT UNIQUE NOT NULL,
+        phone TEXT NOT NULL,
         admin_image_link TEXT,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
