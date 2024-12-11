@@ -1,4 +1,3 @@
-
 // Import required modules
 const express = require("express");
 const { Pool } = require("pg");
@@ -7,14 +6,12 @@ const helmet = require("helmet");
 const { body, validationResult } = require("express-validator");
 const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
-
 const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
 require("dotenv").config(); // Load environment variables
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
-
 
 // Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
@@ -23,7 +20,6 @@ const pool = new Pool({
     rejectUnauthorized: false, // This bypasses certificate verification
   },
 });
-
 // Initialize Express app
 const app = express();
 
@@ -31,14 +27,11 @@ const getClientIp = (req) => {
   const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
   return ip.split(",")[0].trim(); // Handles proxies and IPv6
 };
-
 // Middleware
 app.use(express.json());
 app.use(cors());
 app.use(helmet()); // Basic security headers
 app.use(morgan("combined")); // Logging
-
-
 // Configure CORS for external access
 const corsOptions = {
   origin: "*", // Replace "*" with specific domains for production
@@ -64,7 +57,6 @@ const authorizeAdmin = (req, res, next) => {
   next();
 };
 
-
 // Route for admin registration
 app.post(
   "/api/admin/register",
@@ -78,9 +70,7 @@ app.post(
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-
     const { adminname, username, password, phone, admin_image_link } = req.body;
-
     try {
       // Check if username or phone already exists
       const existingAdmin = await pool.query(
@@ -90,10 +80,8 @@ app.post(
       if (existingAdmin.rows.length) {
         return res.status(400).json({ error: "Admin with this username or phone already exists" });
       }
-
       // Hash the password before saving
       const hashedPassword = await bcrypt.hash(password, 10);
-
       const insertAdminQuery = `
         INSERT INTO admin (adminname, username, password, phone, admin_image_link)
         VALUES ($1, $2, $3, $4, $5) RETURNING id;
@@ -116,29 +104,23 @@ app.post(
 // Route for admin login
 app.post("/api/admin/login", async (req, res) => {
   const { username, password } = req.body;
-
   try {
     // Check if admin exists
     const adminQuery = "SELECT * FROM admin WHERE username = $1;";
     const adminResult = await pool.query(adminQuery, [username]);
-
     if (!adminResult.rows.length) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
-
     const admin = adminResult.rows[0];
-
     // Verify password
     const passwordMatch = await bcrypt.compare(password, admin.password);
     if (!passwordMatch) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
-
     // Generate JWT
     const token = jwt.sign({ id: admin.id, username: admin.username, role: "admin" }, JWT_SECRET, {
       expiresIn: "1h",
     });
-
     res.json({
       message: "Login successful",
       token,
@@ -154,8 +136,6 @@ app.post("/api/admin/login", async (req, res) => {
     res.status(500).json({ error: "Failed to log in" });
   }
 });
-
-
 
 // Initialize DB and start server
 const initializeDbAndServer = async () => {
@@ -188,7 +168,6 @@ const initializeDbAndServer = async () => {
         UNIQUE (job_id, ip_address)
     );
     `);
-
     // Create popup_content table
     await pool.query(`
           CREATE TABLE IF NOT EXISTS popup_content (
@@ -201,8 +180,6 @@ const initializeDbAndServer = async () => {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-
-
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
 
@@ -214,12 +191,10 @@ const initializeDbAndServer = async () => {
         if (!Array.isArray(popList)) {
           throw new Error("pops.json content is not an array");
         }
-
         const insertPopQuery = `
           INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link)
           VALUES ($1, $2, $3, $4, $5);
         `;
-
         for (const popup_content of popList) {
           await pool.query(insertPopQuery, [
             popup_content.popup_heading,
@@ -235,8 +210,6 @@ const initializeDbAndServer = async () => {
         throw error; // rethrow the error to prevent the server from starting
       }
     }
-
-
     // Insert jobs if table is empty
     const jobsCountResult = await pool.query("SELECT COUNT(*) as count FROM job;");
     const jobsCount = jobsCountResult.rows[0].count;
@@ -280,14 +253,12 @@ const initializeDbAndServer = async () => {
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-
     // Check if there are any admins in the table
     const adminCountResult = await pool.query("SELECT COUNT(*) as count FROM admin;");
     const adminCount = adminCountResult.rows[0].count;
     if (adminCount == 0) {
       const data = await fs.readFile("admin.json", "utf8");
       const adminList = JSON.parse(data);
-
       const insertAdminQuery = `
          INSERT INTO admin (adminname, username, password, phone, admin_image_link)
          VALUES ($1, $2, $3, $4, $5);
@@ -304,20 +275,16 @@ const initializeDbAndServer = async () => {
       }
       console.log("Admin data has been imported successfully.");
     }
-
-
     // Start server on 0.0.0.0 for external access
     app.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
     });
-
 
   } catch (error) {
     console.error(`Error initializing the database: ${error.message}`);
     process.exit(1);
   }
 };
-
 
 // Route to fetch admin's own details after login
 app.get("/api/admin/me", authenticateToken, async (req, res) => {
@@ -344,35 +311,84 @@ app.get("/api/admin/me", authenticateToken, async (req, res) => {
   }
 });
 
-app.put("/api/admindetails/update/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { adminname, phone, admin_image_link } = req.body;
+// Route to update admin details
+app.put(
+  "/api/admin/update",
+  authenticateToken, // Ensure the user is authenticated
+  [
+    body("adminname"),
+    body("username"),
+    body("phone"),
+    body("admin_image_link"),
+    body("password"),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-  try {
-    // Check if admin exists
-    const existingAdmin = await pool.query("SELECT id FROM admin WHERE id = $1;", [id]);
+    const { adminname, username, phone, admin_image_link, password } = req.body;
+    const adminId = req.user.id; // Get admin ID from the token
 
-    if (!existingAdmin.rows.length) {
-      return res.status(404).json({ error: "Admin not found" });
+    try {
+      // Check if the username or phone already exists for another admin
+      if (username || phone) {
+        const existingAdmin = await pool.query(
+          "SELECT * FROM admin WHERE (username = $1 OR phone = $2) AND id != $3;",
+          [username, phone, adminId]
+        );
+
+        if (existingAdmin.rows.length) {
+          return res.status(400).json({ error: "Username or phone already in use by another admin" });
+        }
+      }
+
+      // Prepare fields for update
+      const updates = [];
+      const values = [];
+      let index = 1;
+
+      if (adminname) {
+        updates.push(`adminname = $${index++}`);
+        values.push(adminname);
+      }
+      if (username) {
+        updates.push(`username = $${index++}`);
+        values.push(username);
+      }
+      if (phone) {
+        updates.push(`phone = $${index++}`);
+        values.push(phone);
+      }
+      if (admin_image_link) {
+        updates.push(`admin_image_link = $${index++}`);
+        values.push(admin_image_link);
+      }
+      if (password) {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        updates.push(`password = $${index++}`);
+        values.push(hashedPassword);
+      }
+
+      if (updates.length === 0) {
+        return res.status(400).json({ error: "No fields to update" });
+      }
+
+      values.push(adminId); // Add admin ID as the last parameter
+
+      const updateQuery = `
+        UPDATE admin
+        SET ${updates.join(", ")}
+        WHERE id = $${index};
+      `;
+
+      await pool.query(updateQuery, values);
+      res.json({ message: "Admin details updated successfully" });
+    } catch (error) {
+      console.error(`Error updating admin details: ${error.message}`);
+      res.status(500).json({ error: "Failed to update admin details" });
     }
-
-    // Update admin details
-    const updateAdminQuery = `
-      UPDATE admin
-      SET adminname = $1, phone = $2, admin_image_link = $3
-      WHERE id = $4
-      RETURNING *; -- Return the updated row
-    `;
-    const result = await pool.query(updateAdminQuery, [adminname, phone, admin_image_link, id]);
-
-    // Respond with the updated admin data
-    res.json({ message: "Admin updated successfully", admin: result.rows[0] });
-  } catch (error) {
-    console.error(`Error updating Admin: ${error.message}`);
-    res.status(500).json({ error: "Failed to update Admin" });
   }
-});
-
+);
 
 
 // Route to get all jobs with pagination
@@ -421,7 +437,6 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
   }
 });
 
-
 // Route to update a job (admin access only)
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
@@ -433,7 +448,6 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
     if (!existingJob.rows.length) {
       return res.status(404).json({ error: "Job not found" });
     }
-
     const updateJobQuery = `
       UPDATE job
       SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
@@ -457,7 +471,6 @@ app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) 
     if (!existingJob.rows.length) {
       return res.status(404).json({ error: "Job not found" });
     }
-
     const deleteJobQuery = `DELETE FROM job WHERE id = $1;`;
     await pool.query(deleteJobQuery, [id]);
     res.json({ message: "Job deleted successfully" });
@@ -527,9 +540,6 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch job" });
   }
 });
-
-
-
 app.post("/api/jobs/:id/view", async (req, res) => {
   const { id } = req.params;
   const ipAddress = getClientIp(req);
@@ -565,9 +575,6 @@ app.get("/api/jobs/:id/viewers", async (req, res) => {
     res.status(500).json({ error: "Failed to retrieve viewer count" });
   }
 });
-
-
-
 // Fetch the latest popup content
 app.get("/api/popup", async (req, res) => {
   try {
@@ -583,9 +590,6 @@ app.get("/api/popup", async (req, res) => {
     res.status(500).json({ error: "Failed to retrieve popup content" });
   }
 });
-
-
-
 // Admin Panel: Get all popup content
 app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
   try {
@@ -672,14 +676,10 @@ app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async
     res.status(500).json({ error: "Failed to delete popup content" });
   }
 });
-
-
-
 app.use((req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
 });
-
 
 pool.connect()
   .then(() => console.log('Connected to PostgreSQL database'))
