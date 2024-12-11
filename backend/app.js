@@ -360,17 +360,19 @@ app.put("/api/admindetails/update/:id", authenticateToken, authorizeAdmin, async
     const updateAdminQuery = `
       UPDATE admin
       SET adminname = $1, phone = $2, admin_image_link = $3
-      WHERE id = $4;
+      WHERE id = $4
+      RETURNING *; -- Return the updated row
     `;
-    await pool.query(updateAdminQuery, [adminname, phone, admin_image_link, id]);
+    const result = await pool.query(updateAdminQuery, [adminname, phone, admin_image_link, id]);
 
-    // Respond with success
-    res.json({ message: "Admin updated successfully" });
+    // Respond with the updated admin data
+    res.json({ message: "Admin updated successfully", admin: result.rows[0] });
   } catch (error) {
     console.error(`Error updating Admin: ${error.message}`);
     res.status(500).json({ error: "Failed to update Admin" });
   }
 });
+
 
 
 // Route to get all jobs with pagination
