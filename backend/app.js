@@ -7,6 +7,7 @@ const helmet = require("helmet");
 const { body, validationResult } = require("express-validator");
 const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
+
 const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
 require("dotenv").config(); // Load environment variables
@@ -317,85 +318,31 @@ const initializeDbAndServer = async () => {
   }
 };
 
-// Update admin details
-app.put("/api/admin/me", authenticateToken, authorizeAdmin, [
-  body("adminname").optional().notEmpty(),
-  body("phone").optional().isMobilePhone(),
-  body("admin_image_link").optional().isURL(),
-], async (req, res) => {
-  const { adminname, phone, admin_image_link } = req.body;
-  const adminId = req.user.id;  // Extract admin ID from the token
 
-  // Validate incoming data
-  const errors = validationResult(req);
-  if (!errors.isEmpty()) {
-    return res.status(400).json({ errors: errors.array() });
-  }
-
+// Route to fetch admin's own details after login
+app.get("/api/admin/me", authenticateToken, async (req, res) => {
   try {
-    // Update the admin's details only if provided
-    let updateQuery = "UPDATE admin SET ";
-    let values = [];
-    let setQuery = [];
+    const { id } = req.user; // The ID is embedded in the token during login
+    const adminQuery = "SELECT * FROM admin WHERE id = $1";
+    const adminResult = await pool.query(adminQuery, [id]);
 
-    if (adminname) {
-      setQuery.push("adminname = $1");
-      values.push(adminname);
-    }
-    if (phone) {
-      setQuery.push("phone = $2");
-      values.push(phone);
-    }
-    if (admin_image_link) {
-      setQuery.push("admin_image_link = $3");
-      values.push(admin_image_link);
-    }
-
-    if (setQuery.length === 0) {
-      return res.status(400).json({ error: "No fields to update" });
-    }
-
-    updateQuery += setQuery.join(", ") + " WHERE id = $" + (values.length + 1);
-    values.push(adminId);
-
-    await pool.query(updateQuery, values);
-    res.json({ message: "Admin details updated successfully" });
-  } catch (error) {
-    console.error(`Error updating admin details: ${error.message}`);
-    res.status(500).json({ error: "Failed to update admin details" });
-  }
-});
-// Get logged-in admin details
-app.get("/api/admin/me", authenticateToken, authorizeAdmin, async (req, res) => {
-  const adminId = req.user.id;  // Extract admin ID from the token
-
-  try {
-    const query = "SELECT adminname, username, phone, admin_image_link FROM admin WHERE id = $1";
-    const result = await pool.query(query, [adminId]);
-
-    if (result.rows.length === 0) {
+    if (!adminResult.rows.length) {
       return res.status(404).json({ error: "Admin not found" });
     }
 
-    const admin = result.rows[0];
-    res.json({ admin });
+    const admin = adminResult.rows[0];
+    res.json({
+      adminname: admin.adminname,
+      username: admin.username,
+      phone: admin.phone,
+      admin_image_link: admin.admin_image_link,
+      createdAt: admin.createdAt,
+    });
   } catch (error) {
     console.error(`Error fetching admin details: ${error.message}`);
-    res.status(500).json({ error: "Failed to fetch admin details" });
+    res.status(500).json({ error: "Failed to retrieve admin details" });
   }
 });
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
