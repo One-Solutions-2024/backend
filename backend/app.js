@@ -344,6 +344,33 @@ app.get("/api/admin/me", authenticateToken, async (req, res) => {
   }
 });
 
+app.put("/api/admindetails/update/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { adminname, phone, admin_image_link } = req.body;
+
+  try {
+    // Check if admin exists
+    const existingAdmin = await pool.query("SELECT id FROM admin WHERE id = $1;", [id]);
+
+    if (!existingAdmin.rows.length) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    // Update admin details
+    const updateAdminQuery = `
+      UPDATE admin
+      SET adminname = $1, phone = $2, admin_image_link = $3
+      WHERE id = $4;
+    `;
+    await pool.query(updateAdminQuery, [adminname, phone, admin_image_link, id]);
+
+    // Respond with success
+    res.json({ message: "Admin updated successfully" });
+  } catch (error) {
+    console.error(`Error updating Admin: ${error.message}`);
+    res.status(500).json({ error: "Failed to update Admin" });
+  }
+});
 
 
 // Route to get all jobs with pagination
