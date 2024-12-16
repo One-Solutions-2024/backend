@@ -391,6 +391,10 @@ app.put(
 );
 
 
+
+
+
+
 // Route to get all jobs with pagination
 app.get("/api/jobs", async (req, res) => {
   const { page = 1, limit = 8 } = req.query;
@@ -437,29 +441,6 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
   }
 });
 
-// Route to update a job (admin access only)
-app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
-
-  try {
-    const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
-
-    if (!existingJob.rows.length) {
-      return res.status(404).json({ error: "Job not found" });
-    }
-    const updateJobQuery = `
-      UPDATE job
-      SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
-      WHERE id = $13;
-    `;
-    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader, id]);
-    res.json({ message: "Job updated successfully" });
-  } catch (error) {
-    console.error(`Error updating job: ${error.message}`);
-    res.status(500).json({ error: "Failed to update job" });
-  }
-});
 
 // Route to delete a job (admin access only)
 app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
@@ -497,20 +478,31 @@ app.post(
     body("job_type").notEmpty(),
     body("experience").notEmpty(),
     body("batch").notEmpty(),
-    body("job_uploader").notEmpty(),
   ],
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
 
-    const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader } = req.body;
+    const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch } = req.body;
+    const adminId = req.user.id; // Get admin ID from the token
 
     try {
+      // Fetch admin details to get adminname
+      const adminQuery = "SELECT adminname FROM admin WHERE id = $1;";
+      const adminResult = await pool.query(adminQuery, [adminId]);
+      const admin = adminResult.rows[0];
+
+      if (!admin) {
+        return res.status(404).json({ error: "Admin not found" });
+      }
+
+      const jobUploader = admin.adminname; // Use adminname as job uploader
+
       const insertJobQuery = `
         INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
       `;
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader]);
+      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader]);
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error(`Error adding job: ${error.message}`);
@@ -518,6 +510,43 @@ app.post(
     }
   }
 );
+
+// Route to update a job (admin access only)
+app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch } = req.body;
+
+  try {
+    const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
+
+    if (!existingJob.rows.length) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
+    // Fetch admin details to get adminname
+    const adminId = req.user.id; // Get admin ID from the token
+    const adminQuery = "SELECT adminname FROM admin WHERE id = $1;";
+    const adminResult = await pool.query(adminQuery, [adminId]);
+    const admin = adminResult.rows[0];
+
+    if (!admin) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    const jobUploader = admin.adminname; // Use adminname as job uploader
+
+    const updateJobQuery = `
+      UPDATE job
+      SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
+      WHERE id = $13;
+    `;
+    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader, id]);
+    res.json({ message: "Job updated successfully" });
+  } catch ( error) {
+    console.error(`Error updating job: ${error.message}`);
+    res.status(500).json({ error: "Failed to update job" });
+  }
+});
 
 // Fetch job by company name and job URL
 app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
