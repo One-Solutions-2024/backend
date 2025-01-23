@@ -391,7 +391,47 @@ app.put(
 );
 
 
+// Route to reset password
+app.post("/api/admin/forgot-password", async (req, res) => {
+  const { username, newPassword } = req.body;
 
+  // Validate input
+  if (!username || !newPassword) {
+    return res.status(400).json({ error: "Username and new password are required" });
+  }
+
+  if (newPassword.length < 6) {
+    return res.status(400).json({ error: "Password must be at least 6 characters long" });
+  }
+
+  try {
+    // Check if the admin exists
+    const adminQuery = `SELECT id FROM admin WHERE username = $1;`;
+    const adminResult = await pool.query(adminQuery, [username]);
+
+    if (!adminResult.rows.length) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    const adminId = adminResult.rows[0].id;
+
+    // Hash the new password
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    // Update the password in the database
+    const updatePasswordQuery = `
+      UPDATE admin 
+      SET password = $1 
+      WHERE id = $2;
+    `;
+    await pool.query(updatePasswordQuery, [hashedPassword, adminId]);
+
+    res.json({ message: "Password reset successfully" });
+  } catch (error) {
+    console.error(`Error resetting password: ${error.message}`);
+    res.status(500).json({ error: "Failed to reset password" });
+  }
+});
 
 
 
