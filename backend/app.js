@@ -433,24 +433,6 @@ app.post("/api/admin/forgot-password", async (req, res) => {
   }
 });
 
-app.post('/api/admin/check-password', async (req, res) => {
-  const { username, newPassword } = req.body;
-  const user = await User.findOne({ username });
-
-  if (!user) {
-      return res.status(404).json({ error: 'User not found' });
-  }
-
-  const isSamePassword = await bcrypt.compare(newPassword, user.password);
-  if (isSamePassword) {
-      return res.status(400).json({ error: 'Password is the same as the old password' });
-  }
-
-  res.status(200).json({ message: 'Password is valid' });
-});
-
-
-
 // Route to get all jobs with pagination
 app.get("/api/jobs", async (req, res) => {
   const { page = 1, limit = 8 } = req.query;
