@@ -8,6 +8,7 @@ const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
+const WebSocket = require("ws"); // Add WebSocket support
 require("dotenv").config(); // Load environment variables
 
 const PORT = process.env.PORT || 5000;
@@ -23,10 +24,23 @@ const pool = new Pool({
 // Initialize Express app
 const app = express();
 
-const getClientIp = (req) => {
-  const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-  return ip.split(",")[0].trim(); // Handles proxies and IPv6
-};
+// Create WebSocket server
+const wss = new WebSocket.Server({ noServer: true });
+
+wss.on("connection", (ws) => {
+  console.log("New WebSocket connection");
+
+  ws.on("message", (message) => {
+    console.log(`Received: ${message}`);
+    // Broadcast message to all clients
+    wss.clients.forEach((client) => {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
+  });
+});
+
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -37,6 +51,12 @@ const corsOptions = {
   origin: "*", // Replace "*" with specific domains for production
 };
 app.use(cors(corsOptions));
+
+
+const getClientIp = (req) => {
+  const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
+  return ip.split(",")[0].trim(); // Handles proxies and IPv6
+};
 
 const authenticateToken = (req, res, next) => {
   const authHeader = req.headers['authorization'];
@@ -180,6 +200,26 @@ const initializeDbAndServer = async () => {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+
+    // Add tables for chat functionality
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_rooms (
+        id SERIAL PRIMARY KEY,
+        room_name TEXT NOT NULL UNIQUE,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS chat_messages (
+        id SERIAL PRIMARY KEY,
+        room_id INT NOT NULL REFERENCES chat_rooms(id),
+        sender_id INT NOT NULL REFERENCES admin(id),
+        message TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
 
@@ -280,11 +320,84 @@ const initializeDbAndServer = async () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
     });
 
+     // Upgrade HTTP server to WebSocket
+     server.on("upgrade", (request, socket, head) => {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
+    });
+
   } catch (error) {
     console.error(`Error initializing the database: ${error.message}`);
     process.exit(1);
   }
 };
+
+// Chat Routes
+app.post("/api/chat/rooms", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { room_name } = req.body;
+
+  try {
+    const insertRoomQuery = `
+      INSERT INTO chat_rooms (room_name)
+      VALUES ($1)
+      RETURNING *;
+    `;
+    const newRoom = await pool.query(insertRoomQuery, [room_name]);
+    res.status(201).json(newRoom.rows[0]);
+  } catch (error) {
+    console.error(`Error creating chat room: ${error.message}`);
+    res.status(500).json({ error: "Failed to create chat room" });
+  }
+});
+
+app.get("/api/chat/rooms", authenticateToken, async (req, res) => {
+  try {
+    const roomsQuery = "SELECT * FROM chat_rooms ORDER BY created_at DESC;";
+    const rooms = await pool.query(roomsQuery);
+    res.json(rooms.rows);
+  } catch (error) {
+    console.error(`Error fetching chat rooms: ${error.message}`);
+    res.status(500).json({ error: "Failed to fetch chat rooms" });
+  }
+});
+
+app.post("/api/chat/messages", authenticateToken, async (req, res) => {
+  const { room_id, message } = req.body;
+  const sender_id = req.user.id;
+
+  try {
+    const insertMessageQuery = `
+      INSERT INTO chat_messages (room_id, sender_id, message)
+      VALUES ($1, $2, $3)
+      RETURNING *;
+    `;
+    const newMessage = await pool.query(insertMessageQuery, [room_id, sender_id, message]);
+    res.status(201).json(newMessage.rows[0]);
+  } catch (error) {
+    console.error(`Error sending message: ${error.message}`);
+    res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+app.get("/api/chat/messages/:room_id", authenticateToken, async (req, res) => {
+  const { room_id } = req.params;
+
+  try {
+    const messagesQuery = `
+      SELECT cm.*, a.adminname, a.admin_image_link
+      FROM chat_messages cm
+      JOIN admin a ON cm.sender_id = a.id
+      WHERE cm.room_id = $1
+      ORDER BY cm.created_at ASC;
+    `;
+    const messages = await pool.query(messagesQuery, [room_id]);
+    res.json(messages.rows);
+  } catch (error) {
+    console.error(`Error fetching messages: ${error.message}`);
+    res.status(500).json({ error: "Failed to fetch messages" });
+  }
+});
 
 // Route to fetch admin's own details after login
 app.get("/api/admin/me", authenticateToken, async (req, res) => {
@@ -762,6 +875,9 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: "Something went wrong!" });
 });
+
+
+
 
 // Connect to the database and start the server
 initializeDbAndServer();
