@@ -320,6 +320,11 @@ const initializeDbAndServer = async () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
     });
 
+    // Start server
+    const server = app.listen(PORT, () => {
+      console.log(`Server is running on http://localhost:${PORT}/`);
+    });
+
      // Upgrade HTTP server to WebSocket
      server.on("upgrade", (request, socket, head) => {
       wss.handleUpgrade(request, socket, head, (ws) => {
