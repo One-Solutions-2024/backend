@@ -315,10 +315,7 @@ const initializeDbAndServer = async () => {
       }
       console.log("Admin data has been imported successfully.");
     }
-    // Start server on 0.0.0.0 for external access
-    app.listen(PORT, () => {
-      console.log(`Server is running on http://localhost:${PORT}/`);
-    });
+    
 
     // Start server
     const server = app.listen(PORT, () => {
