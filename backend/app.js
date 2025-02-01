@@ -220,6 +220,18 @@ const initializeDbAndServer = async () => {
       );
     `);
 
+          // Create table for direct messages (one-to-one chats)
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS direct_messages (
+          id SERIAL PRIMARY KEY,
+          sender_id INT NOT NULL REFERENCES admin(id),
+          recipient_id INT NOT NULL REFERENCES admin(id),
+          message TEXT NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
+
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
 
@@ -400,6 +412,72 @@ app.get("/api/chat/messages/:room_id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
+
+app.get(
+  "/api/chat/direct-messages/:senderId/:recipientId",
+  authenticateToken,
+  async (req, res) => {
+    const { senderId, recipientId } = req.params;
+    try {
+      const messagesQuery = `
+        SELECT dm.*, a.adminname, a.admin_image_link
+        FROM direct_messages dm
+        JOIN admin a ON dm.sender_id = a.id
+        WHERE (dm.sender_id = $1 AND dm.recipient_id = $2)
+           OR (dm.sender_id = $2 AND dm.recipient_id = $1)
+        ORDER BY dm.created_at ASC;
+      `;
+      const result = await pool.query(messagesQuery, [senderId, recipientId]);
+      res.json(result.rows);
+    } catch (error) {
+      console.error("Error fetching direct messages:", error.message);
+      res.status(500).json({ error: "Failed to fetch direct messages" });
+    }
+  }
+);
+app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
+  const { sender_id, recipient_id, message } = req.body;
+  try {
+    const insertQuery = `
+      INSERT INTO direct_messages (sender_id, recipient_id, message)
+      VALUES ($1, $2, $3)
+      RETURNING *;
+    `;
+    const result = await pool.query(insertQuery, [sender_id, recipient_id, message]);
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Error sending direct message:", error.message);
+    res.status(500).json({ error: "Failed to send direct message" });
+  }
+});
+
+wss.on("connection", (ws, request) => {
+  console.log("New WebSocket connection");
+  
+  // You can extend this to associate ws with a specific admin ID if needed
+
+  ws.on("message", (message) => {
+    const parsed = JSON.parse(message);
+    
+    if (parsed.type === "direct_message") {
+      // For simplicity, broadcast to all clients.
+      // In production, find the client corresponding to parsed.recipient_id and send only to them.
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(JSON.stringify(parsed));
+        }
+      });
+    } else {
+      // Handle other message types (e.g., group messages)
+      wss.clients.forEach((client) => {
+        if (client.readyState === WebSocket.OPEN) {
+          client.send(message);
+        }
+      });
+    }
+  });
+});
+
 
 // Route to get all admins (admin access only)
 app.get("/api/admins", authenticateToken, authorizeAdmin, async (req, res) => {
