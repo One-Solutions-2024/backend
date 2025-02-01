@@ -200,6 +200,19 @@ const initializeDbAndServer = async () => {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    // Add tables for admin functionality
+
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin (
+        id SERIAL PRIMARY KEY,
+        adminname TEXT NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        phone TEXT NOT NULL,
+        admin_image_link TEXT,
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
 
     // Add tables for chat functionality
     await pool.query(`
@@ -294,17 +307,7 @@ const initializeDbAndServer = async () => {
       console.log("Job data has been imported successfully.");
     }
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS admin (
-        id SERIAL PRIMARY KEY,
-        adminname TEXT NOT NULL,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        admin_image_link TEXT,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+    
     // Check if there are any admins in the table
     const adminCountResult = await pool.query("SELECT COUNT(*) as count FROM admin;");
     const adminCount = adminCountResult.rows[0].count;
