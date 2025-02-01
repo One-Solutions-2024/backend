@@ -415,16 +415,21 @@ app.get("/api/chat/messages/:room_id", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch messages" });
   }
 });
-// GET direct messages endpoint
+// GET direct messages endpoint 
 app.get(
   "/api/chat/direct-messages/:senderId/:recipientId",
   authenticateToken,
   async (req, res) => {
     const { senderId, recipientId } = req.params;
-    console.log("Direct messages GET:", { senderId, recipientId });
-    if (!senderId || !recipientId) {
-      return res.status(400).json({ error: "Both senderId and recipientId are required" });
+    
+    // Convert to integers and validate
+    const senderIdInt = parseInt(senderId, 10);
+    const recipientIdInt = parseInt(recipientId, 10);
+    
+    if (isNaN(senderIdInt) || isNaN(recipientIdInt)) {
+      return res.status(400).json({ error: "Invalid sender or recipient ID" });
     }
+
     try {
       const messagesQuery = `
         SELECT dm.*, a.adminname, a.admin_image_link
@@ -434,7 +439,7 @@ app.get(
            OR (dm.sender_id = $2 AND dm.recipient_id = $1)
         ORDER BY dm.created_at ASC;
       `;
-      const result = await pool.query(messagesQuery, [senderId, recipientId]);
+      const result = await pool.query(messagesQuery, [senderIdInt, recipientIdInt]);
       res.json(result.rows);
     } catch (error) {
       console.error("Error fetching direct messages:", error.message);
@@ -442,14 +447,19 @@ app.get(
     }
   }
 );
-
 // POST direct messages endpoint
 app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
   const { sender_id, recipient_id, message } = req.body;
-  console.log("Direct message POST:", { sender_id, recipient_id, message });
-  if (!sender_id || !recipient_id || !message) {
-    return res.status(400).json({ error: "sender_id, recipient_id and message are required" });
+
+  // Validate IDs are numbers
+  if (typeof sender_id !== 'number' || typeof recipient_id !== 'number') {
+    return res.status(400).json({ error: "Invalid sender or recipient ID" });
   }
+
+  if (!message) {
+    return res.status(400).json({ error: "Message is required" });
+  }
+
   try {
     const insertQuery = `
       INSERT INTO direct_messages (sender_id, recipient_id, message)
