@@ -9,11 +9,6 @@ const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
 const WebSocket = require("ws"); // Add WebSocket support
-
-// Replace WebSocket with Socket.IO
-const { createServer } = require("http");
-const { Server } = require("socket.io");
-
 require("dotenv").config(); // Load environment variables
 
 const PORT = process.env.PORT || 5000;
@@ -28,62 +23,23 @@ const pool = new Pool({
 });
 // Initialize Express app
 const app = express();
-const server = createServer(app);
 
-// Configure Socket.IO
-const io = new Server(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  path: "/socket.io/"
-});
-/// Socket.IO connection handler
-io.on("connection", (socket) => {
-  console.log("New Socket.IO connection:", socket.id);
+// Create WebSocket server
+const wss = new WebSocket.Server({ noServer: true });
 
-  socket.on("join_room", (roomId) => {
-    socket.join(roomId);
-    console.log(`User joined room: ${roomId}`);
-  });
+wss.on("connection", (ws) => {
+  console.log("New WebSocket connection");
 
-  socket.on("leave_room", (roomId) => {
-    socket.leave(roomId);
-    console.log(`User left room: ${roomId}`);
-  });
-
-  socket.on("message", async (message) => {
-    try {
-      // Save message to database
-      const insertMessageQuery = `
-        INSERT INTO chat_messages (room_id, sender_id, message)
-        VALUES ($1, $2, $3)
-        RETURNING *;
-      `;
-      const result = await pool.query(insertMessageQuery, [
-        message.room_id,
-        message.sender_id,
-        message.message
-      ]);
-
-      // Broadcast message to room
-      const fullMessage = {
-        ...result.rows[0],
-        adminname: message.adminname,
-        admin_image_link: message.admin_image_link
-      };
-      io.to(message.room_id).emit("message", fullMessage);
-    } catch (error) {
-      console.error("Error handling message:", error);
-    }
-  });
-
-  socket.on("disconnect", () => {
-    console.log("Socket disconnected:", socket.id);
+  ws.on("message", (message) => {
+    console.log(`Received: ${message}`);
+    // Broadcast message to all clients
+    wss.clients.forEach((client) => {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
   });
 });
-
 
 // Middleware
 app.use(express.json());
@@ -109,14 +65,14 @@ const authenticateToken = (req, res, next) => {
   if (!token) return res.status(401).json({ error: "Token required" });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: "Invalid token" });
-    req.user = user; // Save decoded token data (e.g., user id and role)
-    next();
+      if (err) return res.status(403).json({ error: "Invalid token" });
+      req.user = user; // Save decoded token data (e.g., user id and role)
+      next();
   });
 };
 const authorizeAdmin = (req, res, next) => {
   if (req.user.role !== "admin") {
-    return res.status(403).json({ error: "Admin access required" });
+      return res.status(403).json({ error: "Admin access required" });
   }
   next();
 };
@@ -277,8 +233,8 @@ const initializeDbAndServer = async () => {
       );
     `);
 
-    // Create table for direct messages (one-to-one chats)
-    await pool.query(`
+          // Create table for direct messages (one-to-one chats)
+      await pool.query(`
         CREATE TABLE IF NOT EXISTS direct_messages (
           id SERIAL PRIMARY KEY,
           sender_id INT NOT NULL REFERENCES admin(id),
@@ -351,7 +307,7 @@ const initializeDbAndServer = async () => {
       console.log("Job data has been imported successfully.");
     }
 
-
+    
     // Check if there are any admins in the table
     const adminCountResult = await pool.query("SELECT COUNT(*) as count FROM admin;");
     const adminCount = adminCountResult.rows[0].count;
@@ -374,16 +330,15 @@ const initializeDbAndServer = async () => {
       }
       console.log("Admin data has been imported successfully.");
     }
-
+    
 
     // Start server
-    const PORT = process.env.PORT || 5000;
-    server.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+    const server = app.listen(PORT, () => {
+      console.log(`Server is running on http://localhost:${PORT}/`);
     });
 
-    // Upgrade HTTP server to WebSocket
-    server.on("upgrade", (request, socket, head) => {
+     // Upgrade HTTP server to WebSocket
+     server.on("upgrade", (request, socket, head) => {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit("connection", ws, request);
       });
@@ -466,11 +421,11 @@ app.get(
   authenticateToken,
   async (req, res) => {
     const { senderId, recipientId } = req.params;
-
+    
     // Convert to integers and validate
     const senderIdInt = parseInt(senderId, 10);
     const recipientIdInt = parseInt(recipientId, 10);
-
+    
     if (isNaN(senderIdInt) || isNaN(recipientIdInt)) {
       return res.status(400).json({ error: "Invalid sender or recipient ID" });
     }
@@ -837,7 +792,7 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
     `;
     await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader, id]);
     res.json({ message: "Job updated successfully" });
-  } catch (error) {
+  } catch ( error) {
     console.error(`Error updating job: ${error.message}`);
     res.status(500).json({ error: "Failed to update job" });
   }
@@ -1000,7 +955,6 @@ app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async
     res.status(500).json({ error: "Failed to delete popup content" });
   }
 });
-
 app.use((req, res, next) => {
   res.set('Cache-Control', 'no-store');
   next();
