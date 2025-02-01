@@ -401,6 +401,28 @@ app.get("/api/chat/messages/:room_id", authenticateToken, async (req, res) => {
   }
 });
 
+// Route to get all admins (admin access only)
+app.get("/api/admins", authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const adminsQuery = `
+      SELECT 
+        id, 
+        adminname, 
+        username, 
+        phone, 
+        admin_image_link, 
+        createdat AS "createdAt"
+      FROM admin 
+      ORDER BY createdat DESC;
+    `;
+    const result = await pool.query(adminsQuery);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(`Error fetching admins: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve admins" });
+  }
+});
+
 // Route to fetch admin's own details after login
 app.get("/api/admin/me", authenticateToken, async (req, res) => {
   try {
