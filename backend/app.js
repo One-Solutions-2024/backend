@@ -475,33 +475,6 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
 });
 
 
-wss.on("connection", (ws, request) => {
-  console.log("New WebSocket connection");
-  
-  // You can extend this to associate ws with a specific admin ID if needed
-
-  ws.on("message", (message) => {
-    const parsed = JSON.parse(message);
-    
-    if (parsed.type === "direct_message") {
-      // For simplicity, broadcast to all clients.
-      // In production, find the client corresponding to parsed.recipient_id and send only to them.
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(JSON.stringify(parsed));
-        }
-      });
-    } else {
-      // Handle other message types (e.g., group messages)
-      wss.clients.forEach((client) => {
-        if (client.readyState === WebSocket.OPEN) {
-          client.send(message);
-        }
-      });
-    }
-  });
-});
-
 
 // Route to get all admins (admin access only)
 app.get("/api/admins", authenticateToken, authorizeAdmin, async (req, res) => {
