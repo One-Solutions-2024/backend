@@ -104,85 +104,66 @@ const authorizeAdmin = (req, res, next) => {
 };
 
 // Route for admin registration
-app.post(
-  "/api/admin/register",
-  [
-    body("adminname").notEmpty(),
-    body("username").notEmpty(),
-    body("password").isLength({ min: 6 }),
-    body("phone").isMobilePhone(),
-    body("admin_image_link").isURL(),
-  ],
-  async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-    const { adminname, username, password, phone, admin_image_link } = req.body;
-    try {
-       // Check if there are any existing admins
+app.post("/api/admin/register", async (req, res) => {
+  const { adminname, username, password, phone, admin_image_link } = req.body;
+
+  try {
+    // Check if there are any existing admins
     const existingAdmins = await pool.query("SELECT COUNT(*) FROM admin");
     const isFirstAdmin = existingAdmins.rows[0].count == 0;  // If no admins exist, it's the first admin
-    
+
+    // Hash the password
+    const hashedPassword = await bcrypt.hash(password, 10);
+
     // Set status to "approved" if first admin, otherwise "pending"
     const adminStatus = isFirstAdmin ? "approved" : "pending";
 
-      // Check if username or phone already exists
-      const existingAdmin = await pool.query(
-        "SELECT * FROM admin WHERE username = $1 OR phone = $2;",
-        [username, phone]
-      );
-      if (existingAdmin.rows.length) {
-        return res.status(400).json({ error: "Admin with this username or phone already exists" });
-      }
-      // Hash the password before saving
-      const hashedPassword = await bcrypt.hash(password, 10);
-      const insertAdminQuery = `
-        INSERT INTO admin (adminname, username, password, phone, admin_image_link, status)
-        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
-      `;
-      const newAdmin = await pool.query(insertAdminQuery, [
-        adminname,
-        username,
-        hashedPassword,
-        phone,
-        admin_image_link || null,
-        adminStatus,
-      ]);
-      res.status(201).json({
-        message: isFirstAdmin
-          ? "First admin registered successfully! You can now log in."
-          : "Registration successful! Awaiting admin approval.", adminId: newAdmin.rows[0].id
-      });
-    } catch (error) {
-      console.error(`Error registering admin: ${error.message}`);
-      res.status(500).json({ error: "Failed to register admin" });
-    }
+    // Insert into database
+    const newAdmin = await pool.query(
+      "INSERT INTO admin (adminname, username, password, phone, admin_image_link, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
+      [adminname, username, hashedPassword, phone, admin_image_link, adminStatus]
+    );
+
+    res.status(201).json({
+      message: isFirstAdmin
+        ? "First admin registered successfully! You can now log in."
+        : "Registration successful! Awaiting admin approval.",
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Server error. Please try again." });
   }
-);
+});
+
 
 // Route for admin login
 app.post("/api/admin/login", async (req, res) => {
   const { username, password } = req.body;
+
   try {
-    // Check if admin exists
-    const adminQuery = "SELECT * FROM admin WHERE username = $1;";
-    const adminResult = await pool.query(adminQuery, [username]);
-    if (!adminResult.rows.length) {
-      return res.status(401).json({ error: "Invalid username or password" });
+    const result = await pool.query("SELECT * FROM admin WHERE username = $1", [username]);
+    const admin = result.rows[0];
+
+    if (!admin) {
+      return res.status(400).json({ error: "Invalid username or password." });
     }
-    const admin = adminResult.rows[0];
-    // Verify password
-    const passwordMatch = await bcrypt.compare(password, admin.password);
-    if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid username or password" });
+
+    if (admin.status !== "approved") {
+      return res.status(403).json({ error: "Admin approval is pending. Please wait for approval." });
     }
-    // Generate JWT
+
+    const isPasswordValid = await bcrypt.compare(password, admin.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ error: "Invalid username or password." });
+    }
+
     // Generate a token (if using JWT)
     res.json({ message: "Login successful!" });
+
   } catch (error) {
-    console.error(`Error during admin login: ${error.message}`);
-    res.status(500).json({ error: "Failed to log in" });
+    res.status(500).json({ error: "Server error. Please try again." });
   }
 });
+
 
 app.put("/api/admin/reject/:id", async (req, res) => {
   const { id } = req.params;
