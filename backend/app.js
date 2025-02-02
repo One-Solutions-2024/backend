@@ -8,9 +8,8 @@ const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
+const WebSocket = require("ws"); // Add WebSocket support
 require("dotenv").config(); // Load environment variables
-const { createServer } = require("http");
-const { Server } = require("socket.io");
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
@@ -25,45 +24,20 @@ const pool = new Pool({
 // Initialize Express app
 const app = express();
 
-const server = createServer(app);
-// Server-side setup (Node.js/Express)
-const io = require('socket.io')(server, {
-  cors: {
-    origin: "*",
-    methods: ["GET", "POST"],
-    credentials: true
-  },
-  transports: ['websocket', 'polling']
-});
+// Create WebSocket server
+const wss = new WebSocket.Server({ noServer: true });
 
-io.on('connection', (socket) => {
-  console.log('Client connected:', socket.id);
+wss.on("connection", (ws) => {
+  console.log("New WebSocket connection");
 
-  // Handle direct chat room joining
-  socket.on('join_direct', ({ userId, recipientId }) => {
-    const roomName = `direct-${[userId, recipientId].sort().join('-')}`;
-    socket.join(roomName);
-    console.log(`User ${userId} joined direct chat room: ${roomName}`);
-  });
-
-  // Handle direct messages
-  socket.on('direct_message', async (message) => {
-    try {
-      // Save message to database
-      const savedMessage = await saveMessageToDB(message);
-      
-      // Determine the room name
-      const roomName = `direct-${[message.sender_id, message.recipient_id].sort().join('-')}`;
-      
-      // Emit to all in the room
-      io.to(roomName).emit('direct_message', savedMessage);
-    } catch (error) {
-      console.error('Error handling direct message:', error);
-    }
-  });
-
-  socket.on('disconnect', () => {
-    console.log('Client disconnected:', socket.id);
+  ws.on("message", (message) => {
+    console.log(`Received: ${message}`);
+    // Broadcast message to all clients
+    wss.clients.forEach((client) => {
+      if (client !== ws && client.readyState === WebSocket.OPEN) {
+        client.send(message);
+      }
+    });
   });
 });
 
@@ -104,91 +78,84 @@ const authorizeAdmin = (req, res, next) => {
 };
 
 // Route for admin registration
-app.post("/api/admin/register", async (req, res) => {
-  const { adminname, username, password, phone, admin_image_link } = req.body;
-
-  try {
-    // Check if there are any existing admins
-    const existingAdmins = await pool.query("SELECT COUNT(*) FROM admin");
-    const isFirstAdmin = existingAdmins.rows[0].count == 0;  // If no admins exist, it's the first admin
-
-    // Hash the password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Set status to "approved" if first admin, otherwise "pending"
-    const adminStatus = isFirstAdmin ? "approved" : "pending";
-
-    // Insert into database
-    const newAdmin = await pool.query(
-      "INSERT INTO admin (adminname, username, password, phone, admin_image_link, status) VALUES ($1, $2, $3, $4, $5, $6) RETURNING *",
-      [adminname, username, hashedPassword, phone, admin_image_link, adminStatus]
-    );
-
-    res.status(201).json({
-      message: isFirstAdmin
-        ? "First admin registered successfully! You can now log in."
-        : "Registration successful! Awaiting admin approval.",
-    });
-  } catch (error) {
-    res.status(500).json({ error: "Server error. Please try again." });
+app.post(
+  "/api/admin/register",
+  [
+    body("adminname").notEmpty(),
+    body("username").notEmpty(),
+    body("password").isLength({ min: 6 }),
+    body("phone").isMobilePhone(),
+    body("admin_image_link").isURL(),
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const { adminname, username, password, phone, admin_image_link } = req.body;
+    try {
+      // Check if username or phone already exists
+      const existingAdmin = await pool.query(
+        "SELECT * FROM admin WHERE username = $1 OR phone = $2;",
+        [username, phone]
+      );
+      if (existingAdmin.rows.length) {
+        return res.status(400).json({ error: "Admin with this username or phone already exists" });
+      }
+      // Hash the password before saving
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const insertAdminQuery = `
+        INSERT INTO admin (adminname, username, password, phone, admin_image_link)
+        VALUES ($1, $2, $3, $4, $5) RETURNING id;
+      `;
+      const newAdmin = await pool.query(insertAdminQuery, [
+        adminname,
+        username,
+        hashedPassword,
+        phone,
+        admin_image_link || null,
+      ]);
+      res.status(201).json({ message: "Admin registered successfully", adminId: newAdmin.rows[0].id });
+    } catch (error) {
+      console.error(`Error registering admin: ${error.message}`);
+      res.status(500).json({ error: "Failed to register admin" });
+    }
   }
-});
-
+);
 
 // Route for admin login
 app.post("/api/admin/login", async (req, res) => {
   const { username, password } = req.body;
-
   try {
-    const result = await pool.query("SELECT * FROM admin WHERE username = $1", [username]);
-    const admin = result.rows[0];
-
-    if (!admin) {
-      return res.status(400).json({ error: "Invalid username or password." });
+    // Check if admin exists
+    const adminQuery = "SELECT * FROM admin WHERE username = $1;";
+    const adminResult = await pool.query(adminQuery, [username]);
+    if (!adminResult.rows.length) {
+      return res.status(401).json({ error: "Invalid username or password" });
     }
-
-    if (admin.status !== "approved") {
-      return res.status(403).json({ error: "Admin approval is pending. Please wait for approval." });
+    const admin = adminResult.rows[0];
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, admin.password);
+    if (!passwordMatch) {
+      return res.status(401).json({ error: "Invalid username or password" });
     }
-
-    const isPasswordValid = await bcrypt.compare(password, admin.password);
-    if (!isPasswordValid) {
-      return res.status(400).json({ error: "Invalid username or password." });
-    }
-
-    // Generate a token (if using JWT)
-    res.json({ message: "Login successful!" });
-
+    // Generate JWT
+    const token = jwt.sign({ id: admin.id, username: admin.username, role: "admin" }, JWT_SECRET, {
+      expiresIn: "1h",
+    });
+    res.json({
+      message: "Login successful",
+      token,
+      admin: {
+        adminname: admin.adminname,
+        username: admin.username,
+        phone: admin.phone,
+        admin_image_link: admin.admin_image_link,
+      },
+    });
   } catch (error) {
-    res.status(500).json({ error: "Server error. Please try again." });
+    console.error(`Error during admin login: ${error.message}`);
+    res.status(500).json({ error: "Failed to log in" });
   }
 });
-
-
-app.put("/api/admin/reject/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    await pool.query("UPDATE admin SET status = 'rejected' WHERE id = $1", [id]);
-
-    res.json({ message: "Admin rejected successfully." });
-  } catch (error) {
-    res.status(500).json({ error: "Error rejecting admin." });
-  }
-});
-app.put("/api/admin/approve/:id", async (req, res) => {
-  const { id } = req.params;
-
-  try {
-    // Update the status to 'approved'
-    await pool.query("UPDATE admin SET status = 'approved' WHERE id = $1", [id]);
-
-    res.json({ message: "Admin approved successfully!" });
-  } catch (error) {
-    res.status(500).json({ error: "Error approving admin." });
-  }
-});
-
 
 // Initialize DB and start server
 const initializeDbAndServer = async () => {
@@ -243,11 +210,9 @@ const initializeDbAndServer = async () => {
         password TEXT NOT NULL,
         phone TEXT NOT NULL,
         admin_image_link TEXT,
-        status VARCHAR(10) DEFAULT 'pending',
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    
 
     // Add tables for chat functionality
     await pool.query(`
@@ -368,8 +333,15 @@ const initializeDbAndServer = async () => {
     
 
     // Start server
-    app.listen(PORT, () => {
+    const server = app.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
+    });
+
+     // Upgrade HTTP server to WebSocket
+     server.on("upgrade", (request, socket, head) => {
+      wss.handleUpgrade(request, socket, head, (ws) => {
+        wss.emit("connection", ws, request);
+      });
     });
 
   } catch (error) {
@@ -407,7 +379,6 @@ app.get("/api/chat/rooms", authenticateToken, async (req, res) => {
   }
 });
 
-// Updated group messages endpoint
 app.post("/api/chat/messages", authenticateToken, async (req, res) => {
   const { room_id, message } = req.body;
   const sender_id = req.user.id;
@@ -419,16 +390,6 @@ app.post("/api/chat/messages", authenticateToken, async (req, res) => {
       RETURNING *;
     `;
     const newMessage = await pool.query(insertMessageQuery, [room_id, sender_id, message]);
-    
-    // Emit the new message to the room
-    const fullMessage = {
-      ...newMessage.rows[0],
-      adminname: req.user.adminname,
-      admin_image_link: req.user.admin_image_link
-    };
-    
-    io.to(room_id).emit("group_message", fullMessage);
-    
     res.status(201).json(newMessage.rows[0]);
   } catch (error) {
     console.error(`Error sending message: ${error.message}`);
@@ -487,10 +448,17 @@ app.get(
   }
 );
 // POST direct messages endpoint
-// Modified direct messages endpoint
 app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
-  const { recipient_id, message } = req.body;
-  const sender_id = req.user.id; // Get from token
+  const { sender_id, recipient_id, message } = req.body;
+
+  // Validate IDs are numbers
+  if (typeof sender_id !== 'number' || typeof recipient_id !== 'number') {
+    return res.status(400).json({ error: "Invalid sender or recipient ID" });
+  }
+
+  if (!message) {
+    return res.status(400).json({ error: "Message is required" });
+  }
 
   try {
     const insertQuery = `
@@ -499,25 +467,12 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
       RETURNING *;
     `;
     const result = await pool.query(insertQuery, [sender_id, recipient_id, message]);
-    
-    // Emit the new message via Socket.io
-    const newMessage = {
-      ...result.rows[0],
-      adminname: req.user.adminname,
-      admin_image_link: req.user.admin_image_link
-    };
-    
-    io.to(`direct_${sender_id}_${recipient_id}`)
-      .to(`direct_${recipient_id}_${sender_id}`)
-      .emit("direct_message", newMessage);
-
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error sending direct message:", error.message);
     res.status(500).json({ error: "Failed to send direct message" });
   }
 });
-
 
 
 
