@@ -119,7 +119,7 @@ app.post(
     const { adminname, username, password, phone, admin_image_link } = req.body;
     try {
        // Check if there are any existing admins
-    const existingAdmins = await pool.query("SELECT COUNT(*) FROM admins");
+    const existingAdmins = await pool.query("SELECT COUNT(*) FROM admin");
     const isFirstAdmin = existingAdmins.rows[0].count == 0;  // If no admins exist, it's the first admin
     
     // Set status to "approved" if first admin, otherwise "pending"
@@ -192,7 +192,7 @@ app.put("/api/admin/reject/:id", async (req, res) => {
   const { id } = req.params;
 
   try {
-    await pool.query("UPDATE admins SET status = 'rejected' WHERE id = $1", [id]);
+    await pool.query("UPDATE admin SET status = 'rejected' WHERE id = $1", [id]);
 
     res.json({ message: "Admin rejected successfully." });
   } catch (error) {
@@ -204,7 +204,7 @@ app.put("/api/admin/approve/:id", async (req, res) => {
 
   try {
     // Update the status to 'approved'
-    await pool.query("UPDATE admins SET status = 'approved' WHERE id = $1", [id]);
+    await pool.query("UPDATE admin SET status = 'approved' WHERE id = $1", [id]);
 
     res.json({ message: "Admin approved successfully!" });
   } catch (error) {
