@@ -266,9 +266,11 @@ const initializeDbAndServer = async () => {
         password TEXT NOT NULL,
         phone TEXT NOT NULL,
         admin_image_link TEXT,
+        status VARCHAR(10) DEFAULT 'pending',
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    
 
     // Add tables for chat functionality
     await pool.query(`
