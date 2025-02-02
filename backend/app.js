@@ -175,10 +175,6 @@ app.post("/api/admin/login", async (req, res) => {
     if (!passwordMatch) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
-
-    if (admin.status !== "approved") {
-      return res.status(403).json({ error: "Admin approval is pending. Please wait for approval." });
-    }
     // Generate JWT
     // Generate a token (if using JWT)
     res.json({ message: "Login successful!" });
