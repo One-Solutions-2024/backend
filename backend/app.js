@@ -8,7 +8,6 @@ const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
-const WebSocket = require("ws"); // Add WebSocket support
 require("dotenv").config(); // Load environment variables
 const { createServer } = require("http");
 const { Server } = require("socket.io");
@@ -27,29 +26,47 @@ const pool = new Pool({
 const app = express();
 
 const server = createServer(app);
-const io = new Server(server, {
+// Server-side setup (Node.js/Express)
+const io = require('socket.io')(server, {
   cors: {
     origin: "*",
-    methods: ["GET", "POST", "UPDATE", "DELETE"]
-  }
+    methods: ["GET", "POST"],
+    credentials: true
+  },
+  transports: ['websocket', 'polling']
 });
 
-// Socket.io connection handler
-io.on("connection", (socket) => {
-  console.log("New client connected");
+io.on('connection', (socket) => {
+  console.log('Client connected:', socket.id);
 
-  socket.on("join_room", (roomId) => {
-    socket.join(roomId);
+  // Handle direct chat room joining
+  socket.on('join_direct', ({ userId, recipientId }) => {
+    const roomName = `direct-${[userId, recipientId].sort().join('-')}`;
+    socket.join(roomName);
+    console.log(`User ${userId} joined direct chat room: ${roomName}`);
   });
 
-  socket.on("join_direct", ({ userId, recipientId }) => {
-    socket.join(`direct_${userId}_${recipientId}`);
+  // Handle direct messages
+  socket.on('direct_message', async (message) => {
+    try {
+      // Save message to database
+      const savedMessage = await saveMessageToDB(message);
+      
+      // Determine the room name
+      const roomName = `direct-${[message.sender_id, message.recipient_id].sort().join('-')}`;
+      
+      // Emit to all in the room
+      io.to(roomName).emit('direct_message', savedMessage);
+    } catch (error) {
+      console.error('Error handling direct message:', error);
+    }
   });
 
-  socket.on("disconnect", () => {
-    console.log("Client disconnected");
+  socket.on('disconnect', () => {
+    console.log('Client disconnected:', socket.id);
   });
 });
+
 // Middleware
 app.use(express.json());
 app.use(cors());
