@@ -77,7 +77,8 @@ const authorizeAdmin = (req, res, next) => {
   next();
 };
 
-// Route for admin registration
+
+// Modified admin registration route
 app.post(
   "/api/admin/register",
   [
@@ -90,57 +91,92 @@ app.post(
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    
     const { adminname, username, password, phone, admin_image_link } = req.body;
+    
     try {
-      // Check if username or phone already exists
+      // Check if any admin exists
+      const adminCount = await pool.query("SELECT COUNT(*) FROM admin;");
+      const isFirstAdmin = adminCount.rows[0].count === '0';
+
+      // Check if username or phone exists
       const existingAdmin = await pool.query(
         "SELECT * FROM admin WHERE username = $1 OR phone = $2;",
         [username, phone]
       );
       if (existingAdmin.rows.length) {
-        return res.status(400).json({ error: "Admin with this username or phone already exists" });
+        return res.status(400).json({ error: "Username or phone already exists" });
       }
-      // Hash the password before saving
+
+      // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
+      
+      // Determine status
+      const status = isFirstAdmin ? 'approved' : 'pending';
+
       const insertAdminQuery = `
-        INSERT INTO admin (adminname, username, password, phone, admin_image_link)
-        VALUES ($1, $2, $3, $4, $5) RETURNING id;
+        INSERT INTO admin (adminname, username, password, phone, admin_image_link, status)
+        VALUES ($1, $2, $3, $4, $5, $6)
+        RETURNING id, status;
       `;
+
       const newAdmin = await pool.query(insertAdminQuery, [
         adminname,
         username,
         hashedPassword,
         phone,
         admin_image_link || null,
+        status
       ]);
-      res.status(201).json({ message: "Admin registered successfully", adminId: newAdmin.rows[0].id });
+
+      const responseData = {
+        message: isFirstAdmin 
+          ? "First admin registered successfully" 
+          : "Registration submitted for approval",
+        adminId: newAdmin.rows[0].id,
+        status: newAdmin.rows[0].status
+      };
+
+      res.status(201).json(responseData);
     } catch (error) {
       console.error(`Error registering admin: ${error.message}`);
-      res.status(500).json({ error: "Failed to register admin" });
+      res.status(500).json({ error: "Registration failed" });
     }
   }
 );
 
-// Route for admin login
+// Modified admin login route
 app.post("/api/admin/login", async (req, res) => {
   const { username, password } = req.body;
   try {
-    // Check if admin exists
-    const adminQuery = "SELECT * FROM admin WHERE username = $1;";
-    const adminResult = await pool.query(adminQuery, [username]);
+    const adminResult = await pool.query(
+      "SELECT * FROM admin WHERE username = $1;", 
+      [username]
+    );
+    
     if (!adminResult.rows.length) {
-      return res.status(401).json({ error: "Invalid username or password" });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
+
     const admin = adminResult.rows[0];
-    // Verify password
+    
+    // Check if admin is approved
+    if (admin.status !== 'approved') {
+      return res.status(403).json({ error: "Account pending approval" });
+    }
+
     const passwordMatch = await bcrypt.compare(password, admin.password);
     if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid username or password" });
+      return res.status(401).json({ error: "Invalid credentials" });
     }
+
     // Generate JWT
-    const token = jwt.sign({ id: admin.id, username: admin.username, role: "admin" }, JWT_SECRET, {
-      expiresIn: "1h",
-    });
+    const token = jwt.sign(
+      { id: admin.id, username: admin.username, role: "admin" }, 
+      JWT_SECRET, 
+      { expiresIn: "1h" }
+    );
+
     res.json({
       message: "Login successful",
       token,
@@ -149,13 +185,54 @@ app.post("/api/admin/login", async (req, res) => {
         username: admin.username,
         phone: admin.phone,
         admin_image_link: admin.admin_image_link,
-      },
+        status: admin.status
+      }
     });
   } catch (error) {
-    console.error(`Error during admin login: ${error.message}`);
-    res.status(500).json({ error: "Failed to log in" });
+    console.error(`Login error: ${error.message}`);
+    res.status(500).json({ error: "Login failed" });
   }
 });
+
+// New route to get pending admins (admin access only)
+app.get("/api/admin/pending", authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const pendingAdmins = await pool.query(
+      "SELECT id, adminname, username, phone, admin_image_link, createdat FROM admin WHERE status = 'pending';"
+    );
+    res.json(pendingAdmins.rows);
+  } catch (error) {
+    console.error(`Error fetching pending admins: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve pending admins" });
+  }
+});
+
+// New route to approve admins (admin access only)
+app.put("/api/admin/approve/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    // Update admin status and set created_by
+    const result = await pool.query(
+      "UPDATE admin SET status = 'approved', created_by = $1 WHERE id = $2 RETURNING *;",
+      [req.user.id, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Admin not found" });
+    }
+
+    res.json({ 
+      message: "Admin approved successfully",
+      admin: result.rows[0]
+    });
+  } catch (error) {
+    console.error(`Approval error: ${error.message}`);
+    res.status(500).json({ error: "Approval failed" });
+  }
+});
+
+// ... (rest of the code remains the same)
 
 // Initialize DB and start server
 const initializeDbAndServer = async () => {
@@ -202,17 +279,20 @@ const initializeDbAndServer = async () => {
     `);
     // Add tables for admin functionality
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS admin (
-        id SERIAL PRIMARY KEY,
-        adminname TEXT NOT NULL,
-        username TEXT UNIQUE NOT NULL,
-        password TEXT NOT NULL,
-        phone TEXT NOT NULL,
-        admin_image_link TEXT,
-        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-      );
-    `);
+    // Update the admin table creation to include 'status' and 'created_by'
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS admin (
+          id SERIAL PRIMARY KEY,
+          adminname TEXT NOT NULL,
+          username TEXT UNIQUE NOT NULL,
+          password TEXT NOT NULL,
+          phone TEXT NOT NULL,
+          admin_image_link TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',  -- New status field
+          created_by INT REFERENCES admin(id),     -- Track creator
+          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
 
     // Add tables for chat functionality
     await pool.query(`
