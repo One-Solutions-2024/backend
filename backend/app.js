@@ -10,6 +10,8 @@ const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
 const WebSocket = require("ws"); // Add WebSocket support
 require("dotenv").config(); // Load environment variables
+const { createServer } = require("http");
+const { Server } = require("socket.io");
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
@@ -24,23 +26,30 @@ const pool = new Pool({
 // Initialize Express app
 const app = express();
 
-// Create WebSocket server
-const wss = new WebSocket.Server({ noServer: true });
-
-wss.on("connection", (ws) => {
-  console.log("New WebSocket connection");
-
-  ws.on("message", (message) => {
-    console.log(`Received: ${message}`);
-    // Broadcast message to all clients
-    wss.clients.forEach((client) => {
-      if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(message);
-      }
-    });
-  });
+const server = createServer(app);
+const io = new Server(server, {
+  cors: {
+    origin: "*",
+    methods: ["GET", "POST", "UPDATE", "DELETE"]
+  }
 });
 
+// Socket.io connection handler
+io.on("connection", (socket) => {
+  console.log("New client connected");
+
+  socket.on("join_room", (roomId) => {
+    socket.join(roomId);
+  });
+
+  socket.on("join_direct", ({ userId, recipientId }) => {
+    socket.join(`direct_${userId}_${recipientId}`);
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected");
+  });
+});
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -379,6 +388,7 @@ app.get("/api/chat/rooms", authenticateToken, async (req, res) => {
   }
 });
 
+// Updated group messages endpoint
 app.post("/api/chat/messages", authenticateToken, async (req, res) => {
   const { room_id, message } = req.body;
   const sender_id = req.user.id;
@@ -390,6 +400,16 @@ app.post("/api/chat/messages", authenticateToken, async (req, res) => {
       RETURNING *;
     `;
     const newMessage = await pool.query(insertMessageQuery, [room_id, sender_id, message]);
+    
+    // Emit the new message to the room
+    const fullMessage = {
+      ...newMessage.rows[0],
+      adminname: req.user.adminname,
+      admin_image_link: req.user.admin_image_link
+    };
+    
+    io.to(room_id).emit("group_message", fullMessage);
+    
     res.status(201).json(newMessage.rows[0]);
   } catch (error) {
     console.error(`Error sending message: ${error.message}`);
@@ -448,17 +468,10 @@ app.get(
   }
 );
 // POST direct messages endpoint
+// Modified direct messages endpoint
 app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
-  const { sender_id, recipient_id, message } = req.body;
-
-  // Validate IDs are numbers
-  if (typeof sender_id !== 'number' || typeof recipient_id !== 'number') {
-    return res.status(400).json({ error: "Invalid sender or recipient ID" });
-  }
-
-  if (!message) {
-    return res.status(400).json({ error: "Message is required" });
-  }
+  const { recipient_id, message } = req.body;
+  const sender_id = req.user.id; // Get from token
 
   try {
     const insertQuery = `
@@ -467,12 +480,25 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
       RETURNING *;
     `;
     const result = await pool.query(insertQuery, [sender_id, recipient_id, message]);
+    
+    // Emit the new message via Socket.io
+    const newMessage = {
+      ...result.rows[0],
+      adminname: req.user.adminname,
+      admin_image_link: req.user.admin_image_link
+    };
+    
+    io.to(`direct_${sender_id}_${recipient_id}`)
+      .to(`direct_${recipient_id}_${sender_id}`)
+      .emit("direct_message", newMessage);
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error sending direct message:", error.message);
     res.status(500).json({ error: "Failed to send direct message" });
   }
 });
+
 
 
 
