@@ -269,16 +269,6 @@ const initializeDbAndServer = async () => {
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    
-    try {
-      await pool.query(`
-        ALTER TABLE admin ADD COLUMN status VARCHAR(10) DEFAULT 'pending';
-      `);
-      console.log("Admin table updated successfully.");
-    } catch (error) {
-      console.error("Error updating admin table:", error);
-    }
-    
 
     // Add tables for chat functionality
     await pool.query(`
