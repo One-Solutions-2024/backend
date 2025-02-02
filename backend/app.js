@@ -118,6 +118,13 @@ app.post(
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
     const { adminname, username, password, phone, admin_image_link } = req.body;
     try {
+       // Check if there are any existing admins
+    const existingAdmins = await pool.query("SELECT COUNT(*) FROM admins");
+    const isFirstAdmin = existingAdmins.rows[0].count == 0;  // If no admins exist, it's the first admin
+    
+    // Set status to "approved" if first admin, otherwise "pending"
+    const adminStatus = isFirstAdmin ? "approved" : "pending";
+
       // Check if username or phone already exists
       const existingAdmin = await pool.query(
         "SELECT * FROM admin WHERE username = $1 OR phone = $2;",
@@ -129,8 +136,8 @@ app.post(
       // Hash the password before saving
       const hashedPassword = await bcrypt.hash(password, 10);
       const insertAdminQuery = `
-        INSERT INTO admin (adminname, username, password, phone, admin_image_link)
-        VALUES ($1, $2, $3, $4, $5) RETURNING id;
+        INSERT INTO admin (adminname, username, password, phone, admin_image_link, status)
+        VALUES ($1, $2, $3, $4, $5, $6) RETURNING *;
       `;
       const newAdmin = await pool.query(insertAdminQuery, [
         adminname,
@@ -138,8 +145,13 @@ app.post(
         hashedPassword,
         phone,
         admin_image_link || null,
+        adminStatus,
       ]);
-      res.status(201).json({ message: "Admin registered successfully", adminId: newAdmin.rows[0].id });
+      res.status(201).json({
+        message: isFirstAdmin
+          ? "First admin registered successfully! You can now log in."
+          : "Registration successful! Awaiting admin approval.", adminId: newAdmin.rows[0].id
+      });
     } catch (error) {
       console.error(`Error registering admin: ${error.message}`);
       res.status(500).json({ error: "Failed to register admin" });
@@ -163,25 +175,43 @@ app.post("/api/admin/login", async (req, res) => {
     if (!passwordMatch) {
       return res.status(401).json({ error: "Invalid username or password" });
     }
+
+    if (admin.status !== "approved") {
+      return res.status(403).json({ error: "Admin approval is pending. Please wait for approval." });
+    }
     // Generate JWT
-    const token = jwt.sign({ id: admin.id, username: admin.username, role: "admin" }, JWT_SECRET, {
-      expiresIn: "1h",
-    });
-    res.json({
-      message: "Login successful",
-      token,
-      admin: {
-        adminname: admin.adminname,
-        username: admin.username,
-        phone: admin.phone,
-        admin_image_link: admin.admin_image_link,
-      },
-    });
+    // Generate a token (if using JWT)
+    res.json({ message: "Login successful!" });
   } catch (error) {
     console.error(`Error during admin login: ${error.message}`);
     res.status(500).json({ error: "Failed to log in" });
   }
 });
+
+app.put("/api/admin/reject/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    await pool.query("UPDATE admins SET status = 'rejected' WHERE id = $1", [id]);
+
+    res.json({ message: "Admin rejected successfully." });
+  } catch (error) {
+    res.status(500).json({ error: "Error rejecting admin." });
+  }
+});
+app.put("/api/admin/approve/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Update the status to 'approved'
+    await pool.query("UPDATE admins SET status = 'approved' WHERE id = $1", [id]);
+
+    res.json({ message: "Admin approved successfully!" });
+  } catch (error) {
+    res.status(500).json({ error: "Error approving admin." });
+  }
+});
+
 
 // Initialize DB and start server
 const initializeDbAndServer = async () => {
@@ -239,6 +269,16 @@ const initializeDbAndServer = async () => {
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
+    
+    try {
+      await pool.query(`
+        ALTER TABLE admin ADD COLUMN status VARCHAR(10) DEFAULT 'pending';
+      `);
+      console.log("Admin table updated successfully.");
+    } catch (error) {
+      console.error("Error updating admin table:", error);
+    }
+    
 
     // Add tables for chat functionality
     await pool.query(`
