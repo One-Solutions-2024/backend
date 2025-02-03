@@ -211,26 +211,38 @@ app.get("/api/admin/pending", authenticateToken, authorizeAdmin, async (req, res
 app.put("/api/admin/approve/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
 
+  // Validate ID (Ensure it's a positive number)
+  if (isNaN(id) || id <= 0) {
+    return res.status(400).json({ error: "Invalid admin ID" });
+  }
+
   try {
-    // Update admin status and set created_by
+    // Check if the admin exists and is still pending approval
+    const checkAdmin = await pool.query(
+      "SELECT * FROM admin WHERE id = $1 AND status = 'pending';",
+      [id]
+    );
+
+    if (checkAdmin.rows.length === 0) {
+      return res.status(404).json({ error: "Admin not found or already approved" });
+    }
+
+    // Approve admin and set created_by (who approved them)
     const result = await pool.query(
       "UPDATE admin SET status = 'approved', is_approved = TRUE, created_by = $1 WHERE id = $2 RETURNING *;",
       [req.user.id, id]
     );
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Admin not found" });
-    }
-
     res.json({
       message: "Admin approved successfully",
-      admin: result.rows[0]
+      admin: result.rows[0],
     });
   } catch (error) {
     console.error(`Approval error: ${error.message}`);
     res.status(500).json({ error: "Approval failed" });
   }
 });
+
 
 // New route to reject admins (admin access only)
 app.put("/api/admin/reject/:id", authenticateToken, authorizeAdmin, async (req, res) => {
