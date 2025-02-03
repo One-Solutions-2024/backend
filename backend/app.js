@@ -65,14 +65,14 @@ const authenticateToken = (req, res, next) => {
   if (!token) return res.status(401).json({ error: "Token required" });
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-      if (err) return res.status(403).json({ error: "Invalid token" });
-      req.user = user; // Save decoded token data (e.g., user id and role)
-      next();
+    if (err) return res.status(403).json({ error: "Invalid token" });
+    req.user = user; // Save decoded token data (e.g., user id and role)
+    next();
   });
 };
 const authorizeAdmin = (req, res, next) => {
   if (req.user.role !== "admin") {
-      return res.status(403).json({ error: "Admin access required" });
+    return res.status(403).json({ error: "Admin access required" });
   }
   next();
 };
@@ -91,9 +91,9 @@ app.post(
   async (req, res) => {
     const errors = validationResult(req);
     if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-    
+
     const { adminname, username, password, phone, admin_image_link } = req.body;
-    
+
     try {
       // Check if any admin exists
       const adminCount = await pool.query("SELECT COUNT(*) FROM admin;");
@@ -110,7 +110,7 @@ app.post(
 
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
-      
+
       // Determine status
       const status = isFirstAdmin ? 'approved' : 'pending';
 
@@ -130,8 +130,8 @@ app.post(
       ]);
 
       const responseData = {
-        message: isFirstAdmin 
-          ? "First admin registered successfully" 
+        message: isFirstAdmin
+          ? "First admin registered successfully"
           : "Registration submitted for approval",
         adminId: newAdmin.rows[0].id,
         status: newAdmin.rows[0].status
@@ -150,16 +150,16 @@ app.post("/api/admin/login", async (req, res) => {
   const { username, password } = req.body;
   try {
     const adminResult = await pool.query(
-      "SELECT * FROM admin WHERE username = $1;", 
+      "SELECT * FROM admin WHERE username = $1;",
       [username]
     );
-    
+
     if (!adminResult.rows.length) {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
     const admin = adminResult.rows[0];
-    
+
     // Check if admin is approved
     if (admin.status !== 'approved') {
       return res.status(403).json({ error: "Account pending approval" });
@@ -172,8 +172,8 @@ app.post("/api/admin/login", async (req, res) => {
 
     // Generate JWT
     const token = jwt.sign(
-      { id: admin.id, username: admin.username, role: "admin" }, 
-      JWT_SECRET, 
+      { id: admin.id, username: admin.username, role: "admin" },
+      JWT_SECRET,
       { expiresIn: "1h" }
     );
 
@@ -194,46 +194,46 @@ app.post("/api/admin/login", async (req, res) => {
   }
 });
 
-  // New route to get pending admins (admin access only)
-  app.get("/api/admin/pending", authenticateToken, authorizeAdmin, async (req, res) => {
-    try {
-      const pendingAdmins = await pool.query(
-        "SELECT id, adminname, username, phone, admin_image_link, createdat FROM admin WHERE status = 'pending';"
-      );
-      res.json(pendingAdmins.rows);
-    } catch (error) {
-      console.error(`Error fetching pending admins: ${error.message}`);
-      res.status(500).json({ error: "Failed to retrieve pending admins" });
+// New route to get pending admins (admin access only)
+app.get("/api/admin/pending", authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const pendingAdmins = await pool.query(
+      "SELECT id, adminname, username, phone, admin_image_link, createdat FROM admin WHERE status = 'pending';"
+    );
+    res.json(pendingAdmins.rows);
+  } catch (error) {
+    console.error(`Error fetching pending admins: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve pending admins" });
+  }
+});
+
+// New route to approve admins (admin access only)
+app.put("/api/admin/approve/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Update admin status and set created_by
+    const result = await pool.query(
+      "UPDATE admin SET status = 'approved', is_approved = TRUE, created_by = $1 WHERE id = $2 RETURNING *;",
+      [req.user.id, id]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Admin not found" });
     }
-  });
 
-  // New route to approve admins (admin access only)
-  app.put("/api/admin/approve/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-    const { id } = req.params;
-    
-    try {
-      // Update admin status and set created_by
-      const result = await pool.query(
-        "UPDATE admin SET status = 'approved', created_by = $1 WHERE id = $2 RETURNING *;",
-        [req.user.id, id]
-      );
+    res.json({
+      message: "Admin approved successfully",
+      admin: result.rows[0]
+    });
+  } catch (error) {
+    console.error(`Approval error: ${error.message}`);
+    res.status(500).json({ error: "Approval failed" });
+  }
+});
 
-      if (result.rows.length === 0) {
-        return res.status(404).json({ error: "Admin not found" });
-      }
-
-      res.json({ 
-        message: "Admin approved successfully",
-        admin: result.rows[0]
-      });
-    } catch (error) {
-      console.error(`Approval error: ${error.message}`);
-      res.status(500).json({ error: "Approval failed" });
-    }
-  });
-
-  // New route to reject admins (admin access only)
-  app.put("/api/admin/reject/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+// New route to reject admins (admin access only)
+app.put("/api/admin/reject/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
@@ -251,7 +251,7 @@ app.post("/api/admin/login", async (req, res) => {
     console.error(`Rejection error: ${error.message}`);
     res.status(500).json({ error: "Rejection failed" });
   }
-  });
+});
 
 // ... (rest of the code remains the same)
 
@@ -301,7 +301,7 @@ const initializeDbAndServer = async () => {
     // Add tables for admin functionality
 
     // Update the admin table creation to include 'status' and 'created_by'
-      await pool.query(`
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS admin (
           id SERIAL PRIMARY KEY,
           adminname TEXT NOT NULL,
@@ -309,11 +309,13 @@ const initializeDbAndServer = async () => {
           password TEXT NOT NULL,
           phone TEXT NOT NULL,
           admin_image_link TEXT,
+          is_approved BOOLEAN DEFAULT FALSE,
           status TEXT NOT NULL DEFAULT 'pending',  -- New status field
           created_by INT REFERENCES admin(id),     -- Track creator
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
     // Add tables for chat functionality
     await pool.query(`
       CREATE TABLE IF NOT EXISTS chat_rooms (
@@ -333,8 +335,8 @@ const initializeDbAndServer = async () => {
       );
     `);
 
-          // Create table for direct messages (one-to-one chats)
-      await pool.query(`
+    // Create table for direct messages (one-to-one chats)
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS direct_messages (
           id SERIAL PRIMARY KEY,
           sender_id INT NOT NULL REFERENCES admin(id),
@@ -407,7 +409,7 @@ const initializeDbAndServer = async () => {
       console.log("Job data has been imported successfully.");
     }
 
-    
+
     // Check if there are any admins in the table
     const adminCountResult = await pool.query("SELECT COUNT(*) as count FROM admin;");
     const adminCount = adminCountResult.rows[0].count;
@@ -430,15 +432,15 @@ const initializeDbAndServer = async () => {
       }
       console.log("Admin data has been imported successfully.");
     }
-    
+
 
     // Start server
     const server = app.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
     });
 
-     // Upgrade HTTP server to WebSocket
-     server.on("upgrade", (request, socket, head) => {
+    // Upgrade HTTP server to WebSocket
+    server.on("upgrade", (request, socket, head) => {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit("connection", ws, request);
       });
@@ -521,11 +523,11 @@ app.get(
   authenticateToken,
   async (req, res) => {
     const { senderId, recipientId } = req.params;
-    
+
     // Convert to integers and validate
     const senderIdInt = parseInt(senderId, 10);
     const recipientIdInt = parseInt(recipientId, 10);
-    
+
     if (isNaN(senderIdInt) || isNaN(recipientIdInt)) {
       return res.status(400).json({ error: "Invalid sender or recipient ID" });
     }
@@ -574,6 +576,29 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
   }
 });
 
+
+// Route to get all admins approved only (admin access only)
+app.get("/api/admins/approved", authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const adminsQuery = `
+      SELECT 
+        id, 
+        adminname, 
+        username, 
+        phone, 
+        admin_image_link, 
+        createdat AS "createdAt"
+      FROM admin 
+      WHERE is_approved = TRUE
+      ORDER BY createdat DESC;
+    `;
+    const result = await pool.query(adminsQuery);
+    res.json(result.rows);
+  } catch (error) {
+    console.error(`Error fetching admins: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve admins" });
+  }
+});
 
 
 // Route to get all admins (admin access only)
@@ -892,7 +917,7 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
     `;
     await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader, id]);
     res.json({ message: "Job updated successfully" });
-  } catch ( error) {
+  } catch (error) {
     console.error(`Error updating job: ${error.message}`);
     res.status(500).json({ error: "Failed to update job" });
   }
