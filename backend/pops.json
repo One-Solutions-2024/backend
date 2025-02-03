@@ -1,17 +1,10 @@
 [
     {
-      "popup_heading": "Welcome!",
-      "popup_text": "This is a test popup.",
+      "popup_heading": "Welcome! ONE Solutions",
+      "popup_text": "We are delivering Exciting job Updates for Freshers/Experienced.",
       "popup_link": "https://fintechinnovations.com/images/jobs/product-manager.jpg",
       "popup_belowtext": "Enjoy our service",
       "popup_routing_link": "https://example.com"
-    },
-    {
-      "popup_heading": "Update!",
-      "popup_text": "Here’s what's new.",
-      "popup_link": "https://fintechinnovations.com/images/jobs/product-manager.jpg",
-      "popup_belowtext": "Check it out",
-      "popup_routing_link": "https://example.com/updates"
     }
   ]
   
