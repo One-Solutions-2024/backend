@@ -97,7 +97,7 @@ app.post(
     try {
       // Check if any admin exists
       const adminCount = await pool.query("SELECT COUNT(*) FROM admin;");
-      const isFirstAdmin = adminCount.rows[0].count === '0';
+      const isFirstAdmin = adminCount.rows[0].count === '0'; // Check if it's the first admin
 
       // Check if username or phone exists
       const existingAdmin = await pool.query(
@@ -111,13 +111,13 @@ app.post(
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Determine status
-      const status = isFirstAdmin ? 'approved' : 'pending';
+      // Determine status and is_approved
+      const status = isFirstAdmin ? 'approved' : 'pending'; // First admin is automatically approved
 
       const insertAdminQuery = `
-        INSERT INTO admin (adminname, username, password, phone, admin_image_link, status)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id, status;
+        INSERT INTO admin (adminname, username, password, phone, admin_image_link, status, is_approved)
+        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        RETURNING id, status, is_approved;
       `;
 
       const newAdmin = await pool.query(insertAdminQuery, [
@@ -126,7 +126,8 @@ app.post(
         hashedPassword,
         phone,
         admin_image_link || null,
-        status
+        status,
+        isFirstAdmin // Set is_approved to true for the first admin
       ]);
 
       const responseData = {
@@ -134,7 +135,8 @@ app.post(
           ? "First admin registered successfully"
           : "Registration submitted for approval",
         adminId: newAdmin.rows[0].id,
-        status: newAdmin.rows[0].status
+        status: newAdmin.rows[0].status,
+        is_approved: newAdmin.rows[0].is_approved
       };
 
       res.status(201).json(responseData);
