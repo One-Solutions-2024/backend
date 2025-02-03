@@ -562,16 +562,13 @@ app.get(
   }
 );
 // POST direct messages endpoint
+// Modified POST endpoint to use authenticated user
 app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
-  const { sender_id, recipient_id, message } = req.body;
+  const { recipient_id, message } = req.body;
+  const sender_id = req.user.id; // Get sender ID from token
 
-  // Validate IDs are numbers
-  if (typeof sender_id !== 'number' || typeof recipient_id !== 'number') {
-    return res.status(400).json({ error: "Invalid sender or recipient ID" });
-  }
-
-  if (!message) {
-    return res.status(400).json({ error: "Message is required" });
+  if (!recipient_id || !message) {
+    return res.status(400).json({ error: "Recipient ID and message are required" });
   }
 
   try {
@@ -581,6 +578,17 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
       RETURNING *;
     `;
     const result = await pool.query(insertQuery, [sender_id, recipient_id, message]);
+    
+    // Emit WebSocket message
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({
+          type: 'direct_message',
+          message: result.rows[0]
+        }));
+      }
+    });
+    
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error sending direct message:", error.message);
