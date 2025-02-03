@@ -315,7 +315,7 @@ const initializeDbAndServer = async () => {
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
-
+    
     // Add tables for chat functionality
     await pool.query(`
       CREATE TABLE IF NOT EXISTS chat_rooms (
