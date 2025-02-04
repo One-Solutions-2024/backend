@@ -329,14 +329,6 @@ const initializeDbAndServer = async () => {
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
-
-      try {
-        await pool.query(`DELETE FROM admin`);
-        console.log("Admin Data Deleted");
-      } catch (error) {
-        console.error("Admin Data Deletion Failed:", error);
-      }
-      
     
     // Add tables for chat functionality
     await pool.query(`
