@@ -28,8 +28,16 @@ const app = express();
 const wss = new WebSocket.Server({ noServer: true });
 
 // Backend WebSocket handling
-wss.on("connection", (ws) => {
+wss.on('connection', (ws, req) => {
   console.log("New WebSocket connection");
+  const token = req.headers.authorization?.split(' ')[1];
+  if (token) {
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (!err) {
+        ws.userId = user.id; // Attach user ID to WebSocket connection
+      }
+    });
+  }
 
   ws.on("direct_message", (message) => {
     console.log(`Received direct message: ${message}`);
@@ -592,15 +600,23 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
     `;
     const result = await pool.query(insertQuery, [sender_id, recipient_id, message]);
     
-    // Emit WebSocket message
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({
-          type: 'direct_message',
-          message: result.rows[0]
-        }));
-      }
-    });
+    // After saving message to DB
+  const messageWithDetails = {
+    ...result.rows[0],
+    adminname: req.user.adminname,
+    admin_image_link: req.user.admin_image_link
+  };
+
+    // Broadcast to both sender and recipient
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN && 
+        (client.userId === req.user.id || client.userId === recipient_id)) {
+      client.send(JSON.stringify({
+        type: 'direct_message',
+        message: messageWithDetails
+      }));
+    }
+  });
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
