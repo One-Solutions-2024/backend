@@ -31,32 +31,25 @@ const wss = new WebSocket.Server({ noServer: true });
 wss.on('connection', (ws, req) => {
   console.log("New WebSocket connection");
   const token = req.headers.authorization?.split(' ')[1];
+  
   if (token) {
     jwt.verify(token, JWT_SECRET, (err, user) => {
       if (!err) {
-        ws.userId = user.id; // Attach user ID to WebSocket connection
+        ws.userPhone = user.phone; // Attach phone instead of ID
       }
     });
   }
 
-  ws.on("direct_message", (message) => {
-    console.log(`Received direct message: ${message}`);
-    // Broadcast the message to the intended recipient
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify({ type: "direct_message", message }));
-      }
-    });
-  });
-
-  ws.on("join_direct", (data) => {
-    console.log(`User ${data.userId} joined direct chat with ${data.recipientId}`);
-    // Handle joining logic if needed
-  });
-
-  ws.on("leave_direct", (data) => {
-    console.log(`User ${data.userId} left direct chat with ${data.recipientId}`);
-    // Handle leaving logic if needed
+  ws.on('message', (message) => {
+    const data = JSON.parse(message);
+    switch(data.type) {
+      case 'register_phone':
+        ws.userPhone = data.phone;
+        break;
+      case 'direct_message':
+        handleDirectMessage(data);
+        break;
+    }
   });
 });
 
@@ -372,8 +365,8 @@ const initializeDbAndServer = async () => {
     await pool.query(`
         CREATE TABLE IF NOT EXISTS direct_messages (
           id SERIAL PRIMARY KEY,
-          sender_id INT NOT NULL REFERENCES admin(id),
-          recipient_id INT NOT NULL REFERENCES admin(id),
+          sender_phone TEXT NOT NULL REFERENCES admin(phone),
+          recipient_phone TEXT NOT NULL REFERENCES admin(phone),
           message TEXT NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
@@ -551,30 +544,24 @@ app.get("/api/chat/messages/:room_id", authenticateToken, async (req, res) => {
   }
 });
 // GET direct messages endpoint 
+// In your backend routes (replace ID-based with phone-based)
+// Get direct messages between two users
 app.get(
-  "/api/chat/direct-messages/:senderId/:recipientId",
+  "/api/chat/direct-messages/:senderPhone/:recipientPhone",
   authenticateToken,
   async (req, res) => {
-    const { senderId, recipientId } = req.params;
-
-    // Convert to integers and validate
-    const senderIdInt = parseInt(senderId, 10);
-    const recipientIdInt = parseInt(recipientId, 10);
-
-    if (isNaN(senderIdInt) || isNaN(recipientIdInt)) {
-      return res.status(400).json({ error: "Invalid sender or recipient ID" });
-    }
+    const { senderPhone, recipientPhone } = req.params;
 
     try {
       const messagesQuery = `
         SELECT dm.*, a.adminname, a.admin_image_link
         FROM direct_messages dm
-        JOIN admin a ON dm.sender_id = a.id
-        WHERE (dm.sender_id = $1 AND dm.recipient_id = $2)
-           OR (dm.sender_id = $2 AND dm.recipient_id = $1)
+        JOIN admin a ON dm.sender_phone = a.phone
+        WHERE (dm.sender_phone = $1 AND dm.recipient_phone = $2)
+           OR (dm.sender_phone = $2 AND dm.recipient_phone = $1)
         ORDER BY dm.created_at ASC;
       `;
-      const result = await pool.query(messagesQuery, [senderIdInt, recipientIdInt]);
+      const result = await pool.query(messagesQuery, [senderPhone, recipientPhone]);
       res.json(result.rows);
     } catch (error) {
       console.error("Error fetching direct messages:", error.message);
@@ -582,41 +569,36 @@ app.get(
     }
   }
 );
-// POST direct messages endpoint
-// Modified POST endpoint to use authenticated user
-app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
-  const { recipient_id, message } = req.body;
-  const sender_id = req.user.id; // Get sender ID from token
 
-  if (!recipient_id || !message) {
-    return res.status(400).json({ error: "Recipient ID and message are required" });
-  }
+// Send direct message
+app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
+  const { recipient_phone, message } = req.body;
+  const sender_phone = req.user.phone; // Get from authenticated user
 
   try {
     const insertQuery = `
-      INSERT INTO direct_messages (sender_id, recipient_id, message)
+      INSERT INTO direct_messages (sender_phone, recipient_phone, message)
       VALUES ($1, $2, $3)
       RETURNING *;
     `;
-    const result = await pool.query(insertQuery, [sender_id, recipient_id, message]);
+    const result = await pool.query(insertQuery, [sender_phone, recipient_phone, message]);
     
-    // After saving message to DB
-  const messageWithDetails = {
-    ...result.rows[0],
-    adminname: req.user.adminname,
-    admin_image_link: req.user.admin_image_link
-  };
+    // Broadcast message
+    const messageWithDetails = {
+      ...result.rows[0],
+      adminname: req.user.adminname,
+      admin_image_link: req.user.admin_image_link
+    };
 
-    // Broadcast to both sender and recipient
-  wss.clients.forEach(client => {
-    if (client.readyState === WebSocket.OPEN && 
-        (client.userId === req.user.id || client.userId === recipient_id)) {
-      client.send(JSON.stringify({
-        type: 'direct_message',
-        message: messageWithDetails
-      }));
-    }
-  });
+    wss.clients.forEach(client => {
+      if (client.readyState === WebSocket.OPEN && 
+          (client.userPhone === sender_phone || client.userPhone === recipient_phone)) {
+        client.send(JSON.stringify({
+          type: 'direct_message',
+          message: messageWithDetails
+        }));
+      }
+    });
     
     res.status(201).json(result.rows[0]);
   } catch (error) {
@@ -624,8 +606,6 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to send direct message" });
   }
 });
-
-
 // Route to get all admins approved only (admin access only)
 app.get("/api/admins/approved", authenticateToken, authorizeAdmin, async (req, res) => {
   try {
