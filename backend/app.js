@@ -31,7 +31,7 @@ const wss = new WebSocket.Server({ noServer: true });
 wss.on('connection', (ws, req) => {
   console.log("New WebSocket connection");
   const token = req.headers.authorization?.split(' ')[1];
-  
+
   if (token) {
     jwt.verify(token, JWT_SECRET, (err, user) => {
       if (!err) {
@@ -42,7 +42,7 @@ wss.on('connection', (ws, req) => {
 
   ws.on('message', (message) => {
     const data = JSON.parse(message);
-    switch(data.type) {
+    switch (data.type) {
       case 'register_phone':
         ws.userPhone = data.phone;
         break;
@@ -333,15 +333,16 @@ const initializeDbAndServer = async () => {
           adminname TEXT NOT NULL,
           username TEXT UNIQUE NOT NULL,
           password TEXT NOT NULL,
-          phone TEXT NOT NULL,
+          phone TEXT UNIQUE NOT NULL,
           admin_image_link TEXT,
           is_approved BOOLEAN DEFAULT FALSE,
-          status TEXT NOT NULL DEFAULT 'pending',  -- New status field
-          created_by INT REFERENCES admin(id),     -- Track creator
+          status TEXT NOT NULL DEFAULT 'pending',
+          created_by INT REFERENCES admin(id), -- This should work as long as 'id' is a primary key
           createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
-    
+
+     
     // Add tables for chat functionality
     await pool.query(`
       CREATE TABLE IF NOT EXISTS chat_rooms (
@@ -582,7 +583,7 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
       RETURNING *;
     `;
     const result = await pool.query(insertQuery, [sender_phone, recipient_phone, message]);
-    
+
     // Broadcast message
     const messageWithDetails = {
       ...result.rows[0],
@@ -591,15 +592,15 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
     };
 
     wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN && 
-          (client.userPhone === sender_phone || client.userPhone === recipient_phone)) {
+      if (client.readyState === WebSocket.OPEN &&
+        (client.userPhone === sender_phone || client.userPhone === recipient_phone)) {
         client.send(JSON.stringify({
           type: 'direct_message',
           message: messageWithDetails
         }));
       }
     });
-    
+
     res.status(201).json(result.rows[0]);
   } catch (error) {
     console.error("Error sending direct message:", error.message);
