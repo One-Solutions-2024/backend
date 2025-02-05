@@ -27,17 +27,28 @@ const app = express();
 // Create WebSocket server
 const wss = new WebSocket.Server({ noServer: true });
 
+// Backend WebSocket handling
 wss.on("connection", (ws) => {
   console.log("New WebSocket connection");
 
-  ws.on("message", (message) => {
-    console.log(`Received: ${message}`);
-    // Broadcast message to all clients
+  ws.on("direct_message", (message) => {
+    console.log(`Received direct message: ${message}`);
+    // Broadcast the message to the intended recipient
     wss.clients.forEach((client) => {
-      if (client !== ws && client.readyState === WebSocket.OPEN) {
-        client.send(message);
+      if (client.readyState === WebSocket.OPEN) {
+        client.send(JSON.stringify({ type: "direct_message", message }));
       }
     });
+  });
+
+  ws.on("join_direct", (data) => {
+    console.log(`User ${data.userId} joined direct chat with ${data.recipientId}`);
+    // Handle joining logic if needed
+  });
+
+  ws.on("leave_direct", (data) => {
+    console.log(`User ${data.userId} left direct chat with ${data.recipientId}`);
+    // Handle leaving logic if needed
   });
 });
 
@@ -1121,9 +1132,6 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: "Something went wrong!" });
 });
-
-
-
 
 // Connect to the database and start the server
 initializeDbAndServer();
