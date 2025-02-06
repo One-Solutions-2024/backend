@@ -347,6 +347,7 @@ const initializeDbAndServer = async () => {
         );
       `);
 
+
      
     // Add tables for chat functionality
     await pool.query(`
