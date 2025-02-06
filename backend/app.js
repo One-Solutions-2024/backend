@@ -160,6 +160,7 @@ app.post(
 );
 
 // Modified admin login route
+// Update the login route to include phone in JWT
 app.post("/api/admin/login", async (req, res) => {
   const { username, password } = req.body;
   try {
@@ -174,7 +175,6 @@ app.post("/api/admin/login", async (req, res) => {
 
     const admin = adminResult.rows[0];
 
-    // Check if admin is approved
     if (admin.status !== 'approved') {
       return res.status(403).json({ error: "Account pending approval" });
     }
@@ -184,9 +184,14 @@ app.post("/api/admin/login", async (req, res) => {
       return res.status(401).json({ error: "Invalid credentials" });
     }
 
-    // Generate JWT
+    // Include phone in JWT
     const token = jwt.sign(
-      { id: admin.id, username: admin.username, role: "admin" },
+      { 
+        id: admin.id, 
+        username: admin.username,
+        phone: admin.phone,  // Add this line
+        role: "admin" 
+      },
       JWT_SECRET,
       { expiresIn: "1h" }
     );
@@ -572,28 +577,54 @@ app.get(
 );
 
 // Send direct message
+// Update direct message handler with validation
 app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
   const { recipient_phone, message } = req.body;
-  const sender_phone = req.user.phone; // Get from authenticated user
+  const sender_phone = req.user.phone;
+
+  if (!recipient_phone || !message) {
+    return res.status(400).json({ error: "Missing required fields" });
+  }
 
   try {
+    // Check if recipient exists
+    const recipientCheck = await pool.query(
+      "SELECT * FROM admin WHERE phone = $1",
+      [recipient_phone]
+    );
+    
+    if (recipientCheck.rows.length === 0) {
+      return res.status(404).json({ error: "Recipient not found" });
+    }
+
     const insertQuery = `
       INSERT INTO direct_messages (sender_phone, recipient_phone, message)
       VALUES ($1, $2, $3)
       RETURNING *;
     `;
-    const result = await pool.query(insertQuery, [sender_phone, recipient_phone, message]);
+    
+    const result = await pool.query(insertQuery, [
+      sender_phone,
+      recipient_phone,
+      message
+    ]);
 
-    // Broadcast message
+    // Get sender details for real-time update
+    const senderResult = await pool.query(
+      "SELECT adminname, admin_image_link FROM admin WHERE phone = $1",
+      [sender_phone]
+    );
+
     const messageWithDetails = {
       ...result.rows[0],
-      adminname: req.user.adminname,
-      admin_image_link: req.user.admin_image_link
+      adminname: senderResult.rows[0].adminname,
+      admin_image_link: senderResult.rows[0].admin_image_link
     };
 
+    // Broadcast to both sender and recipient
     wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN &&
-        (client.userPhone === sender_phone || client.userPhone === recipient_phone)) {
+      if (client.readyState === WebSocket.OPEN && 
+          (client.userPhone === sender_phone || client.userPhone === recipient_phone)) {
         client.send(JSON.stringify({
           type: 'direct_message',
           message: messageWithDetails
@@ -601,12 +632,16 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
       }
     });
 
-    res.status(201).json(result.rows[0]);
+    res.status(201).json(messageWithDetails);
   } catch (error) {
     console.error("Error sending direct message:", error.message);
-    res.status(500).json({ error: "Failed to send direct message" });
+    res.status(500).json({ 
+      error: "Failed to send direct message",
+      details: error.message 
+    });
   }
 });
+
 // Route to get all admins approved only (admin access only)
 app.get("/api/admins/approved", authenticateToken, authorizeAdmin, async (req, res) => {
   try {
