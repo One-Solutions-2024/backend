@@ -186,11 +186,11 @@ app.post("/api/admin/login", async (req, res) => {
 
     // Include phone in JWT
     const token = jwt.sign(
-      { 
-        id: admin.id, 
+      {
+        id: admin.id,
         username: admin.username,
         phone: admin.phone,  // Add this line
-        role: "admin" 
+        role: "admin"
       },
       JWT_SECRET,
       { expiresIn: "1h" }
@@ -348,7 +348,7 @@ const initializeDbAndServer = async () => {
       `);
 
 
-     
+
     // Add tables for chat functionality
     await pool.query(`
       CREATE TABLE IF NOT EXISTS chat_rooms (
@@ -582,10 +582,17 @@ app.get(
 app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
   const { recipient_phone, message } = req.body;
   const sender_phone = req.user.phone;
-
-  if (!recipient_phone || !message) {
-    return res.status(400).json({ error: "Missing required fields" });
+  // Enhanced validation
+  if (!recipient_phone?.match(/^\d{10}$/)) {
+    return res.status(400).json({ error: "Invalid recipient phone format" });
   }
+
+  if (!message?.trim() || message.length > 500) {
+    return res.status(400).json({
+      error: "Message must be between 1-500 characters"
+    });
+  }
+
 
   try {
     // Check if recipient exists
@@ -593,7 +600,7 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
       "SELECT * FROM admin WHERE phone = $1",
       [recipient_phone]
     );
-    
+
     if (recipientCheck.rows.length === 0) {
       return res.status(404).json({ error: "Recipient not found" });
     }
@@ -603,7 +610,7 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
       VALUES ($1, $2, $3)
       RETURNING *;
     `;
-    
+
     const result = await pool.query(insertQuery, [
       sender_phone,
       recipient_phone,
@@ -624,8 +631,8 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
 
     // Broadcast to both sender and recipient
     wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN && 
-          (client.userPhone === sender_phone || client.userPhone === recipient_phone)) {
+      if (client.readyState === WebSocket.OPEN &&
+        (client.userPhone === sender_phone || client.userPhone === recipient_phone)) {
         client.send(JSON.stringify({
           type: 'direct_message',
           message: messageWithDetails
@@ -636,9 +643,9 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
     res.status(201).json(messageWithDetails);
   } catch (error) {
     console.error("Error sending direct message:", error.message);
-    res.status(500).json({ 
+    res.status(500).json({
       error: "Failed to send direct message",
-      details: error.message 
+      details: error.message
     });
   }
 });
