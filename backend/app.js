@@ -321,7 +321,7 @@ const initializeDbAndServer = async () => {
         batch TEXT NOT NULL,
         job_uploader TEXT NOT NULL,
         approved_by INT REFERENCES admin(id),
-        created_by SET DEFAULT 0,
+        created_by INT REFERENCES admin(id), -- This field references the admin who created the job
         status VARCHAR(20) DEFAULT 'pending',
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -351,10 +351,6 @@ const initializeDbAndServer = async () => {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-
-    // Add tables for admin functionality
-
-
 
     // Add tables for chat functionality
     await pool.query(`
@@ -888,9 +884,9 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
   const getAllJobsQuery = `SELECT j.*, 
       creator.adminname as creator_name,
       approver.adminname as approver_name
-    FROM job j
-    LEFT JOIN admin creator ON j.created_by = creator.id
-    LEFT JOIN admin approver ON j.approved_by = approver.id
+      FROM job j
+      LEFT JOIN admin creator ON j.created_by = creator.id
+      LEFT JOIN admin approver ON j.approved_by = approver.id
   `;
 
   try {
@@ -948,22 +944,11 @@ app.post(
     const adminId = req.user.id; // Get admin ID from the token
 
     try {
-      // Fetch admin details to get adminname
-      const adminQuery = "SELECT adminname FROM admin WHERE id = $1;";
-      const adminResult = await pool.query(adminQuery, [adminId]);
-      const admin = adminResult.rows[0];
-
-      if (!admin) {
-        return res.status(404).json({ error: "Admin not found" });
-      }
-
-      const jobUploader = admin.adminname; // Use adminname as job uploader
-
       const insertJobQuery = `
         INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader, created_by)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
       `;
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader, adminId]);
+      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, req.user.username, adminId]);
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error(`Error adding job: ${error.message}`);
