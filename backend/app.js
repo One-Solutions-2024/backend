@@ -123,12 +123,14 @@ app.post(
       // Hash password
       const hashedPassword = await bcrypt.hash(password, 10);
 
-      // Determine status and is_approved
-      const status = isFirstAdmin ? 'approved' : 'pending'; // First admin is automatically approved
+      // Determine status, is_approved, and created_by
+      const status = isFirstAdmin ? "approved" : "pending";
+      const isApproved = isFirstAdmin;
+      const createdBy = isFirstAdmin ? null : req.user?.id; // First admin has no creator
 
       const insertAdminQuery = `
-        INSERT INTO admin (adminname, username, password, phone, admin_image_link, status, is_approved)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
+        INSERT INTO admin (adminname, username, password, phone, admin_image_link, status, is_approved, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id, status, is_approved;
       `;
 
@@ -139,7 +141,8 @@ app.post(
         phone,
         admin_image_link || null,
         status,
-        isFirstAdmin // Set is_approved to true for the first admin
+        isApproved,
+        createdBy
       ]);
 
       const responseData = {
@@ -158,6 +161,7 @@ app.post(
     }
   }
 );
+
 
 // Modified admin login route
 // Update the login route to include phone in JWT
@@ -944,20 +948,23 @@ app.post(
     const adminId = req.user.id; // Get admin ID from the token
 
     try {
-      const adminQuery = "SELECT adminname FROM admin WHERE id = $1;";
+      // Fetch admin's full name from the database
+      const adminQuery = `SELECT adminname FROM admin WHERE id = $1`;
       const adminResult = await pool.query(adminQuery, [adminId]);
-      const admin = adminResult.rows[0];
-      if (!admin) {
+
+      if (adminResult.rows.length === 0) {
         return res.status(404).json({ error: "Admin not found" });
       }
 
-      const jobUploader = admin.adminname; // Use adminname as job uploader
+      const adminName = adminResult.rows[0].adminname; // Get admin's full name
 
       const insertJobQuery = `
         INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader, created_by)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
       `;
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader, adminId]);
+
+      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, adminName, adminId]);
+
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error(`Error adding job: ${error.message}`);
@@ -965,6 +972,7 @@ app.post(
     }
   }
 );
+
 
 //jobs Modify Approval
 app.put("/api/jobs/:id/approve", authenticateToken, authorizeAdmin, async (req, res) => {
