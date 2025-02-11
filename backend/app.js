@@ -289,6 +289,22 @@ app.put("/api/admin/reject/:id", authenticateToken, authorizeAdmin, async (req, 
 // Initialize DB and start server
 const initializeDbAndServer = async () => {
   try {
+    // Update the admin table creation to include 'status' and 'created_by'
+    await pool.query(`
+      CREATE TABLE IF NOT EXISTS admin (
+        id SERIAL PRIMARY KEY,
+        adminname TEXT NOT NULL,
+        username TEXT UNIQUE NOT NULL,
+        password TEXT NOT NULL,
+        phone TEXT UNIQUE NOT NULL,
+        admin_image_link TEXT,
+        is_approved BOOLEAN DEFAULT FALSE,
+        status TEXT NOT NULL DEFAULT 'pending',
+        created_by INT REFERENCES admin(id), -- This should work as long as 'id' is a primary key
+        createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+
     await pool.query(`
       CREATE TABLE IF NOT EXISTS job (
         id SERIAL PRIMARY KEY,
@@ -304,6 +320,9 @@ const initializeDbAndServer = async () => {
         experience TEXT NOT NULL,
         batch TEXT NOT NULL,
         job_uploader TEXT NOT NULL,
+        approved_by INT REFERENCES admin(id),
+        created_by SET DEFAULT 0,
+        status VARCHAR(20) DEFAULT 'pending',
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
@@ -326,26 +345,14 @@ const initializeDbAndServer = async () => {
           popup_link TEXT NOT NULL,
           popup_belowtext TEXT NOT NULL,
           popup_routing_link TEXT NOT NULL,
+          created_by INT REFERENCES admin(id),
+          approved_by INT REFERENCES admin(id),
+          status VARCHAR(20) DEFAULT 'pending',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
     `);
-    // Add tables for admin functionality
 
-    // Update the admin table creation to include 'status' and 'created_by'
-    await pool.query(`
-        CREATE TABLE IF NOT EXISTS admin (
-          id SERIAL PRIMARY KEY,
-          adminname TEXT NOT NULL,
-          username TEXT UNIQUE NOT NULL,
-          password TEXT NOT NULL,
-          phone TEXT UNIQUE NOT NULL,
-          admin_image_link TEXT,
-          is_approved BOOLEAN DEFAULT FALSE,
-          status TEXT NOT NULL DEFAULT 'pending',
-          created_by INT REFERENCES admin(id), -- This should work as long as 'id' is a primary key
-          createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        );
-      `);
+    // Add tables for admin functionality
 
 
 
@@ -878,7 +885,13 @@ app.get("/api/jobs", async (req, res) => {
 
 // Admin Panel: Get all jobs (admin access only)
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
-  const getAllJobsQuery = `SELECT * FROM job ORDER BY createdAt DESC;`;
+  const getAllJobsQuery = `SELECT j.*, 
+      creator.adminname as creator_name,
+      approver.adminname as approver_name
+    FROM job j
+    LEFT JOIN admin creator ON j.created_by = creator.id
+    LEFT JOIN admin approver ON j.approved_by = approver.id
+  `;
 
   try {
     const jobsArray = await pool.query(getAllJobsQuery);
@@ -947,10 +960,10 @@ app.post(
       const jobUploader = admin.adminname; // Use adminname as job uploader
 
       const insertJobQuery = `
-        INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
+        INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader, created_by)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
       `;
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader]);
+      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader, adminId]);
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error(`Error adding job: ${error.message}`);
@@ -958,6 +971,19 @@ app.post(
     }
   }
 );
+
+//jobs Modify Approval
+app.put("/api/jobs/:id/approve", authenticateToken, authorizeAdmin, async (req, res) => {
+  const jobId = req.params.id;
+  const approverId = req.user.id;
+
+  await pool.query(`
+    UPDATE job SET 
+      status = 'approved',
+      approved_by = $1
+    WHERE id = $2
+  `, [approverId, jobId]);
+});
 
 // Route to update a job (admin access only)
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
