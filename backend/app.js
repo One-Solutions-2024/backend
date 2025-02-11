@@ -944,11 +944,20 @@ app.post(
     const adminId = req.user.id; // Get admin ID from the token
 
     try {
+      const adminQuery = "SELECT adminname FROM admin WHERE id = $1;";
+      const adminResult = await pool.query(adminQuery, [adminId]);
+      const admin = adminResult.rows[0];
+      if (!admin) {
+        return res.status(404).json({ error: "Admin not found" });
+      }
+
+      const jobUploader = admin.adminname; // Use adminname as job uploader
+
       const insertJobQuery = `
         INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader, created_by)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
       `;
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, req.user.username, adminId]);
+      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader, adminId]);
       res.status(201).json({ message: "Job added successfully" });
     } catch (error) {
       console.error(`Error adding job: ${error.message}`);
