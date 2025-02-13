@@ -10,9 +10,14 @@ const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
 const WebSocket = require("ws"); // Add WebSocket support
 require("dotenv").config(); // Load environment variables
+const http = require('http');
+const socketIo = require('socket.io');
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
+
+const server = http.createServer(app);
+const io = socketIo(server);
 
 // Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
@@ -514,36 +519,39 @@ const initializeDbAndServer = async () => {
   }
 };
 
+// Add WebSocket broadcast for status updates
+function broadcastStatus(phone, isOnline) {
+  wss.clients.forEach(client => {
+    if (client.readyState === WebSocket.OPEN) {
+      client.send(JSON.stringify({
+        type: 'status_update',
+        phone,
+        isOnline
+      }));
+    }
+  });
+}
+
 // Session endpoints
-app.get('/api/session/status', authenticateToken, async (req, res) => {
+// Add new endpoint to get online status for all admins
+app.get("/api/admins/status", authenticateToken, authorizeAdmin, async (req, res) => {
   try {
-    const adminId = req.user.id;
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    // Get current session
-    const activeSession = await pool.query(
-      `SELECT * FROM admin_sessions 
-       WHERE admin_id = $1 AND end_time IS NULL`,
-      [adminId]
-    );
-
-    // Calculate today's total
-    const todayTotal = await pool.query(
-      `SELECT SUM(EXTRACT(EPOCH FROM duration)) as total 
-       FROM admin_sessions 
-       WHERE admin_id = $1 AND start_time >= $2`,
-      [adminId, todayStart]
-    );
-
-    res.json({
-      isOnline: activeSession.rows.length > 0,
-      todayTotal: todayTotal.rows[0].total || 0,
-      currentSessionStart: activeSession.rows[0]?.start_time
-    });
+    const query = `
+      SELECT 
+        a.id,
+        a.phone,
+        EXISTS (
+          SELECT 1 FROM admin_sessions 
+          WHERE admin_id = a.id AND end_time IS NULL
+        ) as "isOnline"
+      FROM admin a
+      WHERE a.is_approved = TRUE;
+    `;
+    const result = await pool.query(query);
+    res.json(result.rows);
   } catch (error) {
-    console.error('Error getting session status:', error);
-    res.status(500).json({ error: 'Failed to get session status' });
+    console.error('Error fetching admin statuses:', error);
+    res.status(500).json({ error: 'Failed to retrieve statuses' });
   }
 });
 
@@ -570,6 +578,7 @@ app.post('/api/session/start', authenticateToken, async (req, res) => {
     console.error('Error starting session:', error);
     res.status(500).json({ error: 'Failed to start session' });
   }
+  broadcastStatus(req.user.phone, true);
 });
 
 app.post('/api/session/end', authenticateToken, async (req, res) => {
@@ -600,6 +609,7 @@ app.post('/api/session/end', authenticateToken, async (req, res) => {
     console.error('Error ending session:', error);
     res.status(500).json({ error: 'Failed to end session' });
   }
+  broadcastStatus(req.user.phone, false);
 });
 
 // Monthly report job
@@ -820,18 +830,23 @@ app.get("/api/admins/approved", authenticateToken, authorizeAdmin, async (req, r
 
 
 // Route to get all admins (admin access only)
+// Modify existing admins endpoint to include online status
 app.get("/api/admins", authenticateToken, authorizeAdmin, async (req, res) => {
   try {
     const adminsQuery = `
       SELECT 
-        id, 
-        adminname, 
-        username, 
-        phone, 
-        admin_image_link, 
-        createdat AS "createdAt"
-      FROM admin 
-      ORDER BY createdat DESC;
+        a.id, 
+        a.adminname, 
+        a.username, 
+        a.phone, 
+        a.admin_image_link, 
+        a.createdat AS "createdAt",
+        EXISTS (
+          SELECT 1 FROM admin_sessions 
+          WHERE admin_id = a.id AND end_time IS NULL
+        ) AS "isOnline"
+      FROM admin a
+      ORDER BY a.createdat DESC;
     `;
     const result = await pool.query(adminsQuery);
     res.json(result.rows);
