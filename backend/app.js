@@ -174,7 +174,7 @@ app.post("/api/admin/login", async (req, res) => {
     );
 
     if (!adminResult.rows.length) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      return res.status(401).json({ error: "Invalid credentials or Please Register" });
     }
 
     const admin = adminResult.rows[0];
@@ -185,7 +185,7 @@ app.post("/api/admin/login", async (req, res) => {
 
     const passwordMatch = await bcrypt.compare(password, admin.password);
     if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid credentials" });
+      return res.status(401).json({ error: "Invalid Passward" });
     }
 
     // Include phone in JWT
