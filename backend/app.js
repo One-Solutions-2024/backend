@@ -10,14 +10,10 @@ const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
 const WebSocket = require("ws"); // Add WebSocket support
 require("dotenv").config(); // Load environment variables
-const http = require('http');
-const socketIo = require('socket.io');
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
 
-const server = http.createServer(app);
-const io = socketIo(server);
 
 // Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
