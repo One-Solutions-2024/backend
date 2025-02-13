@@ -386,6 +386,28 @@ const initializeDbAndServer = async () => {
         );
       `);
 
+            // Add new tables
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS admin_sessions (
+          id SERIAL PRIMARY KEY,
+          admin_id INT REFERENCES admin(id),
+          start_time TIMESTAMP NOT NULL,
+          end_time TIMESTAMP,
+          duration INTERVAL
+        );
+      `);
+
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS monthly_reports (
+          id SERIAL PRIMARY KEY,
+          admin_id INT REFERENCES admin(id),
+          month INT,
+          year INT,
+          total_time BIGINT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
 
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
@@ -491,6 +513,122 @@ const initializeDbAndServer = async () => {
     process.exit(1);
   }
 };
+
+// Session endpoints
+app.get('/api/session/status', authenticateToken, async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const now = new Date();
+    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+
+    // Get current session
+    const activeSession = await pool.query(
+      `SELECT * FROM admin_sessions 
+       WHERE admin_id = $1 AND end_time IS NULL`,
+      [adminId]
+    );
+
+    // Calculate today's total
+    const todayTotal = await pool.query(
+      `SELECT SUM(EXTRACT(EPOCH FROM duration)) as total 
+       FROM admin_sessions 
+       WHERE admin_id = $1 AND start_time >= $2`,
+      [adminId, todayStart]
+    );
+
+    res.json({
+      isOnline: activeSession.rows.length > 0,
+      todayTotal: todayTotal.rows[0].total || 0,
+      currentSessionStart: activeSession.rows[0]?.start_time
+    });
+  } catch (error) {
+    console.error('Error getting session status:', error);
+    res.status(500).json({ error: 'Failed to get session status' });
+  }
+});
+
+app.post('/api/session/start', authenticateToken, async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const existingSession = await pool.query(
+      'SELECT * FROM admin_sessions WHERE admin_id = $1 AND end_time IS NULL',
+      [adminId]
+    );
+
+    if (existingSession.rows.length > 0) {
+      return res.status(400).json({ error: 'Session already active' });
+    }
+
+    const startTime = new Date();
+    await pool.query(
+      'INSERT INTO admin_sessions (admin_id, start_time) VALUES ($1, $2)',
+      [adminId, startTime]
+    );
+
+    res.json({ message: 'Session started', startTime });
+  } catch (error) {
+    console.error('Error starting session:', error);
+    res.status(500).json({ error: 'Failed to start session' });
+  }
+});
+
+app.post('/api/session/end', authenticateToken, async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const activeSession = await pool.query(
+      'SELECT * FROM admin_sessions WHERE admin_id = $1 AND end_time IS NULL',
+      [adminId]
+    );
+
+    if (activeSession.rows.length === 0) {
+      return res.status(400).json({ error: 'No active session' });
+    }
+
+    const endTime = new Date();
+    const startTime = activeSession.rows[0].start_time;
+    const duration = Math.floor((endTime - startTime) / 1000);
+
+    await pool.query(
+      `UPDATE admin_sessions 
+       SET end_time = $1, duration = $2 * INTERVAL '1 second'
+       WHERE id = $3`,
+      [endTime, duration, activeSession.rows[0].id]
+    );
+
+    res.json({ message: 'Session ended', duration });
+  } catch (error) {
+    console.error('Error ending session:', error);
+    res.status(500).json({ error: 'Failed to end session' });
+  }
+});
+
+// Monthly report job
+const schedule = require('node-schedule');
+schedule.scheduleJob('59 23 L * *', async () => {
+  try {
+    const now = new Date();
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+
+    const result = await pool.query(
+      `SELECT admin_id, SUM(EXTRACT(EPOCH FROM duration)) as total
+       FROM admin_sessions
+       WHERE start_time BETWEEN $1 AND $2
+       GROUP BY admin_id`,
+      [monthStart, monthEnd]
+    );
+
+    for (const row of result.rows) {
+      await pool.query(
+        `INSERT INTO monthly_reports (admin_id, month, year, total_time)
+         VALUES ($1, $2, $3, $4)`,
+        [row.admin_id, now.getMonth() + 1, now.getFullYear(), row.total]
+      );
+    }
+  } catch (error) {
+    console.error('Error generating monthly report:', error);
+  }
+});
 
 // Chat Routes
 app.post("/api/chat/rooms", authenticateToken, authorizeAdmin, async (req, res) => {
