@@ -514,9 +514,44 @@ const initializeDbAndServer = async () => {
   }
 };
 
+// Add this route to get session status
+app.get('/api/session/status', authenticateToken, async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    
+    // Get current session
+    const activeSession = await pool.query(
+      `SELECT * FROM admin_sessions 
+       WHERE admin_id = $1 AND end_time IS NULL`,
+      [adminId]
+    );
+
+    // Calculate today's total time
+    const todayStart = new Date();
+    todayStart.setHours(0,0,0,0);
+    
+    const todayResult = await pool.query(
+      `SELECT SUM(EXTRACT(EPOCH FROM duration)) as total
+       FROM admin_sessions 
+       WHERE admin_id = $1 AND start_time >= $2`,
+      [adminId, todayStart]
+    );
+
+    res.json({
+      isOnline: activeSession.rows.length > 0,
+      todayTotal: todayResult.rows[0].total || 0,
+      currentSessionStart: activeSession.rows[0]?.start_time
+    });
+  } catch (error) {
+    console.error('Error fetching session status:', error);
+    res.status(500).json({ error: 'Failed to get session status' });
+  }
+});
+
+
 // Session endpoints
 // Add this route in your backend code
-app.get("/api/admins/status", authenticateToken, async (req, res) => {
+app.get("/api/admins/status/individual", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT a.id, 
@@ -589,29 +624,46 @@ app.post('/api/session/end', authenticateToken, async (req, res) => {
   }
 });
 
+app.post('/api/session/update', authenticateToken, async (req, res) => {
+  try {
+    const adminId = req.user.id;
+    const { duration } = req.body;
+
+    await pool.query(
+      `UPDATE admin_sessions 
+       SET duration = $1 * INTERVAL '1 second'
+       WHERE admin_id = $2 AND end_time IS NULL`,
+      [duration, adminId]
+    );
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error updating session:', error);
+    res.status(500).json({ error: 'Failed to update session' });
+  }
+});
 // Monthly report job
 const schedule = require('node-schedule');
+// Monthly report generation (runs last day of month at 23:59)
 schedule.scheduleJob('59 23 L * *', async () => {
   try {
     const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-    const monthEnd = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+    const month = now.getMonth() + 1;
+    const year = now.getFullYear();
 
     const result = await pool.query(
-      `SELECT admin_id, SUM(EXTRACT(EPOCH FROM duration)) as total
+      `INSERT INTO monthly_reports (admin_id, month, year, total_time)
+       SELECT 
+         admin_id,
+         $1 as month,
+         $2 as year,
+         SUM(EXTRACT(EPOCH FROM duration)) as total
        FROM admin_sessions
-       WHERE start_time BETWEEN $1 AND $2
+       WHERE EXTRACT(MONTH FROM start_time) = $1
+         AND EXTRACT(YEAR FROM start_time) = $2
        GROUP BY admin_id`,
-      [monthStart, monthEnd]
+      [month, year]
     );
-
-    for (const row of result.rows) {
-      await pool.query(
-        `INSERT INTO monthly_reports (admin_id, month, year, total_time)
-         VALUES ($1, $2, $3, $4)`,
-        [row.admin_id, now.getMonth() + 1, now.getFullYear(), row.total]
-      );
-    }
   } catch (error) {
     console.error('Error generating monthly report:', error);
   }
