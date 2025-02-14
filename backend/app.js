@@ -669,6 +669,64 @@ schedule.scheduleJob('59 23 L * *', async () => {
   }
 });
 
+// Edit group chat room (Admin only)
+app.put("/api/chat/rooms/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { id } = req.params;
+  const { room_name } = req.body;
+
+  try {
+    // Check for existing room with same name
+    const existingRoom = await pool.query(
+      "SELECT * FROM chat_rooms WHERE room_name = $1 AND id != $2",
+      [room_name, id]
+    );
+    
+    if (existingRoom.rows.length > 0) {
+      return res.status(400).json({ error: "Room name already exists" });
+    }
+
+    const updateQuery = `
+      UPDATE chat_rooms 
+      SET room_name = $1 
+      WHERE id = $2 
+      RETURNING *;
+    `;
+    
+    const result = await pool.query(updateQuery, [room_name, id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+    
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error(`Error updating room: ${error.message}`);
+    res.status(500).json({ error: "Failed to update room" });
+  }
+});
+
+// Delete group chat room (Admin only)
+app.delete("/api/chat/rooms/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Delete related messages first
+    await pool.query("DELETE FROM chat_messages WHERE room_id = $1", [id]);
+    
+    const deleteQuery = "DELETE FROM chat_rooms WHERE id = $1 RETURNING *";
+    const result = await pool.query(deleteQuery, [id]);
+    
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: "Room not found" });
+    }
+    
+    res.json({ message: "Room deleted successfully" });
+  } catch (error) {
+    console.error(`Error deleting room: ${error.message}`);
+    res.status(500).json({ error: "Failed to delete room" });
+  }
+});
+
 // Chat Routes
 app.post("/api/chat/rooms", authenticateToken, authorizeAdmin, async (req, res) => {
   const { room_name } = req.body;
