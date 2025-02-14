@@ -515,35 +515,22 @@ const initializeDbAndServer = async () => {
 };
 
 // Session endpoints
-app.get('/api/session/status', authenticateToken, async (req, res) => {
+// Add this route in your backend code
+app.get("/api/admins/status", authenticateToken, async (req, res) => {
   try {
-    const adminId = req.user.id;
-    const now = new Date();
-    const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-
-    // Get current session
-    const activeSession = await pool.query(
-      `SELECT * FROM admin_sessions 
-       WHERE admin_id = $1 AND end_time IS NULL`,
-      [adminId]
-    );
-
-    // Calculate today's total
-    const todayTotal = await pool.query(
-      `SELECT SUM(EXTRACT(EPOCH FROM duration)) as total 
-       FROM admin_sessions 
-       WHERE admin_id = $1 AND start_time >= $2`,
-      [adminId, todayStart]
-    );
-
-    res.json({
-      isOnline: activeSession.rows.length > 0,
-      todayTotal: todayTotal.rows[0].total || 0,
-      currentSessionStart: activeSession.rows[0]?.start_time
-    });
+    const result = await pool.query(`
+      SELECT a.id, 
+             EXISTS (
+               SELECT 1 FROM admin_sessions 
+               WHERE admin_id = a.id AND end_time IS NULL
+             ) as is_online
+      FROM admin a
+      WHERE a.is_approved = TRUE;
+    `);
+    res.json(result.rows);
   } catch (error) {
-    console.error('Error getting session status:', error);
-    res.status(500).json({ error: 'Failed to get session status' });
+    console.error(`Error fetching admin statuses: ${error.message}`);
+    res.status(500).json({ error: "Failed to retrieve admin statuses" });
   }
 });
 
