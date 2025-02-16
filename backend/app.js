@@ -1160,31 +1160,112 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
   }
 });
 
-// New approval request endpoint
-app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
-  const { jobId, action, data } = req.body;
-  const requesterAdminId = req.user.id;
-
+// 2. New endpoints
+app.get('/api/job-approval-requests', authenticateToken, async (req, res) => {
   try {
-    const jobResult = await pool.query("SELECT created_by FROM job WHERE id = $1", [jobId]);
-    if (jobResult.rows.length === 0) return res.status(404).json({ error: "Job not found" });
+    const result = await pool.query(`
+      SELECT r.*, j.companyname, a.adminname as requester_name 
+      FROM job_approval_requests r
+      JOIN job j ON r.job_id = j.id
+      JOIN admin a ON r.requester_admin_id = a.id
+      WHERE r.owner_admin_id = $1 AND r.status = 'pending'
+    `, [req.user.id]);
     
-    const ownerAdminId = jobResult.rows[0].created_by;
-    if (requesterAdminId === ownerAdminId) return res.status(400).json({ error: "You are the owner" });
-
-    const insertQuery = `
-      INSERT INTO job_approval_requests 
-        (job_id, requester_admin_id, owner_admin_id, action, data)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *;
-    `;
-    
-    const result = await pool.query(insertQuery, 
-      [jobId, requesterAdminId, ownerAdminId, action, data]);
-    res.status(201).json(result.rows[0]);
+    res.json(result.rows);
   } catch (error) {
-    console.error("Error creating approval request:", error);
-    res.status(500).json({ error: "Failed to create approval request" });
+    console.error('Error fetching approval requests:', error);
+    res.status(500).json({ error: 'Failed to fetch requests' });
+  }
+});
+
+app.post('/api/job-approval-requests/:id/approve', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { action } = req.body;
+
+    // Get the request
+    const request = await pool.query(
+      `SELECT * FROM job_approval_requests WHERE id = $1`,
+      [id]
+    );
+
+    if (request.rows.length === 0) {
+      return res.status(404).json({ error: 'Request not found' });
+    }
+
+    const { job_id, data, requester_admin_id } = request.rows[0];
+
+    // Verify owner
+    const job = await pool.query(
+      `SELECT created_by FROM job WHERE id = $1`,
+      [job_id]
+    );
+    
+    if (job.rows[0].created_by !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorized' });
+    }
+
+    // Perform the approved action
+    if (action === 'edit') {
+      await pool.query(
+        `UPDATE job SET 
+          companyname = $1,
+          title = $2,
+          description = $3,
+          apply_link = $4,
+          image_link = $5,
+          url = $6,
+          salary = $7,
+          location = $8,
+          job_type = $9,
+          experience = $10,
+          batch = $11
+        WHERE id = $12`,
+        [
+          data.companyname,
+          data.title,
+          data.description,
+          data.apply_link,
+          data.image_link,
+          data.url,
+          data.salary,
+          data.location,
+          data.job_type,
+          data.experience,
+          data.batch,
+          job_id
+        ]
+      );
+    } else if (action === 'delete') {
+      await pool.query(`DELETE FROM job WHERE id = $1`, [job_id]);
+    }
+
+    // Update request status
+    await pool.query(
+      `UPDATE job_approval_requests SET status = 'approved' WHERE id = $1`,
+      [id]
+    );
+
+    res.json({ message: 'Request approved and action performed' });
+  } catch (error) {
+    console.error('Error approving request:', error);
+    res.status(500).json({ error: 'Failed to approve request' });
+  }
+});
+
+app.post('/api/job-approval-requests/:id/reject', authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    await pool.query(
+      `UPDATE job_approval_requests SET status = 'rejected' WHERE id = $1`,
+      [id]
+    );
+
+    res.json({ message: 'Request rejected' });
+  } catch (error) {
+    console.error('Error rejecting request:', error);
+    res.status(500).json({ error: 'Failed to reject request' });
   }
 });
 
