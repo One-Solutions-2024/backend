@@ -408,6 +408,20 @@ const initializeDbAndServer = async () => {
         );
       `);
 
+      // Add these to your existing table creation
+      await pool.query(`
+        CREATE TABLE IF NOT EXISTS job_approval_requests (
+          id SERIAL PRIMARY KEY,
+          job_id INT NOT NULL REFERENCES job(id),
+          requester_admin_id INT NOT NULL REFERENCES admin(id),
+          owner_admin_id INT NOT NULL REFERENCES admin(id),
+          action VARCHAR(10) NOT NULL,
+          data JSONB,
+          status VARCHAR(10) DEFAULT 'pending',
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        );
+      `);
+
 
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
@@ -1119,21 +1133,58 @@ app.get("/api/jobs", async (req, res) => {
 });
 
 // Admin Panel: Get all jobs (admin access only)
+// Modified GET /api/jobs/adminpanel
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
-  const getAllJobsQuery = `SELECT j.*, 
-      creator.adminname as creator_name,
-      approver.adminname as approver_name
+  const viewAll = req.query.view === 'all';
+  const adminId = req.user.id;
+
+  try {
+    let query = `
+      SELECT j.*, 
+        creator.adminname as creator_name,
+        approver.adminname as approver_name
       FROM job j
       LEFT JOIN admin creator ON j.created_by = creator.id
       LEFT JOIN admin approver ON j.approved_by = approver.id
-  `;
+    `;
 
-  try {
-    const jobsArray = await pool.query(getAllJobsQuery);
-    res.send(jobsArray.rows);
+    if (!viewAll) {
+      query += ` WHERE j.created_by = $1`;
+    }
+
+    const result = await pool.query(query, viewAll ? [] : [adminId]);
+    res.json(result.rows);
   } catch (error) {
     console.error("Error retrieving jobs:", error);
     res.status(500).send("An error occurred while retrieving jobs.");
+  }
+});
+
+// New approval request endpoint
+app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
+  const { jobId, action, data } = req.body;
+  const requesterAdminId = req.user.id;
+
+  try {
+    const jobResult = await pool.query("SELECT created_by FROM job WHERE id = $1", [jobId]);
+    if (jobResult.rows.length === 0) return res.status(404).json({ error: "Job not found" });
+    
+    const ownerAdminId = jobResult.rows[0].created_by;
+    if (requesterAdminId === ownerAdminId) return res.status(400).json({ error: "You are the owner" });
+
+    const insertQuery = `
+      INSERT INTO job_approval_requests 
+        (job_id, requester_admin_id, owner_admin_id, action, data)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *;
+    `;
+    
+    const result = await pool.query(insertQuery, 
+      [jobId, requesterAdminId, ownerAdminId, action, data]);
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Error creating approval request:", error);
+    res.status(500).json({ error: "Failed to create approval request" });
   }
 });
 
