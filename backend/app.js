@@ -1178,6 +1178,34 @@ app.get('/api/job-approval-requests', authenticateToken, async (req, res) => {
   }
 });
 
+app.post('/api/job-approval-requests', async (req, res) => {
+  try {
+    // In a real-world scenario, you’d get the current user from req.user via auth middleware.
+    const requester_admin_id = req.user ? req.user.id : req.body.requester_admin_id; 
+    const { jobId, action, owner_admin_id, data } = req.body;
+
+    if (!jobId || !action || !owner_admin_id) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const newRequest = new JobApprovalRequest({
+      job_id: jobId,
+      action,
+      requester_admin_id,
+      owner_admin_id,
+      status: 'pending',
+      data: data || {},
+    });
+
+    await newRequest.save();
+    res.status(201).json(newRequest);
+  } catch (error) {
+    console.error('Error creating approval request:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+
 app.post('/api/job-approval-requests/:id/approve', authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
