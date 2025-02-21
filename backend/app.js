@@ -1167,10 +1167,7 @@ app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
   try {
     const { jobId, action, data, owner_admin_id } = req.body;
     const requesterAdminId = req.user.id;
-    // Add validation for edit requests
-    if (action === 'edit' && !data) {
-      return res.status(400).json({ error: "Data required for edit requests" });
-    }
+
     // Validate request
     if (!jobId || !action || !owner_admin_id) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -1234,7 +1231,6 @@ app.post("/api/job-approval-requests/:id/approve", authenticateToken, async (req
       [id]
     );
 
-    
     // Perform the approved action
     if (request.rows[0].action === 'edit') {
       await pool.query(
