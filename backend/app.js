@@ -1167,7 +1167,10 @@ app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
   try {
     const { jobId, action, data, owner_admin_id } = req.body;
     const requesterAdminId = req.user.id;
-
+    // Add validation for edit requests
+    if (action === 'edit' && !data) {
+      return res.status(400).json({ error: "Data required for edit requests" });
+    }
     // Validate request
     if (!jobId || !action || !owner_admin_id) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -1231,6 +1234,19 @@ app.post("/api/job-approval-requests/:id/approve", authenticateToken, async (req
       [id]
     );
 
+    // Check data exists for edit requests
+    if (request.rows[0].action === 'edit' && !request.rows[0].data) {
+      return res.status(400).json({ error: "Edit request missing data" });
+    }
+
+          // In the same approve route
+      if (request.rows[0].action === 'edit') {
+        const requestData = request.rows[0].data;
+        // Proceed with update using requestData
+      } else if (request.rows[0].action === 'delete') {
+        // Delete doesn't need data
+        await pool.query("DELETE FROM job WHERE id = $1", [request.rows[0].job_id]);
+      }
     // Perform the approved action
     if (request.rows[0].action === 'edit') {
       await pool.query(
