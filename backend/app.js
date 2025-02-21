@@ -1160,81 +1160,79 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
   }
 });
 
-// 2. New endpoints
-app.get('/api/job-approval-requests', authenticateToken, async (req, res) => {
+// Add these routes after your existing job routes
+
+// Create approval request
+app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT r.*, j.companyname, a.adminname as requester_name 
+    const { jobId, action, data, owner_admin_id } = req.body;
+    const requesterAdminId = req.user.id;
+
+    // Validate request
+    if (!jobId || !action || !owner_admin_id) {
+      return res.status(400).json({ error: "Missing required fields" });
+    }
+
+    // Check if job exists
+    const jobExists = await pool.query("SELECT id FROM job WHERE id = $1", [jobId]);
+    if (jobExists.rows.length === 0) {
+      return res.status(404).json({ error: "Job not found" });
+    }
+
+    // Insert request
+    const result = await pool.query(
+      `INSERT INTO job_approval_requests 
+      (job_id, requester_admin_id, owner_admin_id, action, data)
+      VALUES ($1, $2, $3, $4, $5)
+      RETURNING *`,
+      [jobId, requesterAdminId, owner_admin_id, action, data || null]
+    );
+
+    res.status(201).json(result.rows[0]);
+  } catch (error) {
+    console.error("Error creating approval request:", error);
+    res.status(500).json({ error: "Failed to create request" });
+  }
+});
+
+// Get pending approval requests for current admin
+app.get("/api/job-approval-requests", authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT r.*, j.companyname, a.adminname as requester_name 
       FROM job_approval_requests r
       JOIN job j ON r.job_id = j.id
       JOIN admin a ON r.requester_admin_id = a.id
-      WHERE r.owner_admin_id = $1 AND r.status = 'pending'
-    `, [req.user.id]);
+      WHERE r.owner_admin_id = $1 AND r.status = 'pending'`,
+      [req.user.id]
+    );
     
     res.json(result.rows);
   } catch (error) {
-    console.error('Error fetching approval requests:', error);
-    res.status(500).json({ error: 'Failed to fetch requests' });
+    console.error("Error fetching approval requests:", error);
+    res.status(500).json({ error: "Failed to fetch requests" });
   }
 });
 
-app.post('/api/job-approval-requests', async (req, res) => {
-  try {
-    // In a real-world scenario, you’d get the current user from req.user via auth middleware.
-    const requester_admin_id = req.user ? req.user.id : req.body.requester_admin_id; 
-    const { jobId, action, owner_admin_id, data } = req.body;
-
-    if (!jobId || !action || !owner_admin_id) {
-      return res.status(400).json({ message: 'Missing required fields' });
-    }
-
-    const newRequest = new JobApprovalRequest({
-      job_id: jobId,
-      action,
-      requester_admin_id,
-      owner_admin_id,
-      status: 'pending',
-      data: data || {},
-    });
-
-    await newRequest.save();
-    res.status(201).json(newRequest);
-  } catch (error) {
-    console.error('Error creating approval request:', error);
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
-
-app.post('/api/job-approval-requests/:id/approve', authenticateToken, async (req, res) => {
+// Approve request
+app.post("/api/job-approval-requests/:id/approve", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
-    const { action } = req.body;
-
-    // Get the request
-    const request = await pool.query(
-      `SELECT * FROM job_approval_requests WHERE id = $1`,
+    
+    // Update request status
+    await pool.query(
+      "UPDATE job_approval_requests SET status = 'approved' WHERE id = $1",
       [id]
     );
 
-    if (request.rows.length === 0) {
-      return res.status(404).json({ error: 'Request not found' });
-    }
-
-    const { job_id, data, requester_admin_id } = request.rows[0];
-
-    // Verify owner
-    const job = await pool.query(
-      `SELECT created_by FROM job WHERE id = $1`,
-      [job_id]
+    // Get request details
+    const request = await pool.query(
+      "SELECT * FROM job_approval_requests WHERE id = $1",
+      [id]
     );
-    
-    if (job.rows[0].created_by !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorized' });
-    }
 
     // Perform the approved action
-    if (action === 'edit') {
+    if (request.rows[0].action === 'edit') {
       await pool.query(
         `UPDATE job SET 
           companyname = $1,
@@ -1250,50 +1248,45 @@ app.post('/api/job-approval-requests/:id/approve', authenticateToken, async (req
           batch = $11
         WHERE id = $12`,
         [
-          data.companyname,
-          data.title,
-          data.description,
-          data.apply_link,
-          data.image_link,
-          data.url,
-          data.salary,
-          data.location,
-          data.job_type,
-          data.experience,
-          data.batch,
-          job_id
+          request.rows[0].data.companyname,
+          request.rows[0].data.title,
+          request.rows[0].data.description,
+          request.rows[0].data.apply_link,
+          request.rows[0].data.image_link,
+          request.rows[0].data.url,
+          request.rows[0].data.salary,
+          request.rows[0].data.location,
+          request.rows[0].data.job_type,
+          request.rows[0].data.experience,
+          request.rows[0].data.batch,
+          request.rows[0].job_id
         ]
       );
-    } else if (action === 'delete') {
-      await pool.query(`DELETE FROM job WHERE id = $1`, [job_id]);
+    } else if (request.rows[0].action === 'delete') {
+      await pool.query("DELETE FROM job WHERE id = $1", [request.rows[0].job_id]);
     }
 
-    // Update request status
-    await pool.query(
-      `UPDATE job_approval_requests SET status = 'approved' WHERE id = $1`,
-      [id]
-    );
-
-    res.json({ message: 'Request approved and action performed' });
+    res.json({ message: "Request approved and action performed" });
   } catch (error) {
-    console.error('Error approving request:', error);
-    res.status(500).json({ error: 'Failed to approve request' });
+    console.error("Error approving request:", error);
+    res.status(500).json({ error: "Failed to approve request" });
   }
 });
 
-app.post('/api/job-approval-requests/:id/reject', authenticateToken, async (req, res) => {
+// Reject request
+app.post("/api/job-approval-requests/:id/reject", authenticateToken, async (req, res) => {
   try {
     const { id } = req.params;
 
     await pool.query(
-      `UPDATE job_approval_requests SET status = 'rejected' WHERE id = $1`,
+      "UPDATE job_approval_requests SET status = 'rejected' WHERE id = $1",
       [id]
     );
 
-    res.json({ message: 'Request rejected' });
+    res.json({ message: "Request rejected" });
   } catch (error) {
-    console.error('Error rejecting request:', error);
-    res.status(500).json({ error: 'Failed to reject request' });
+    console.error("Error rejecting request:", error);
+    res.status(500).json({ error: "Failed to reject request" });
   }
 });
 
