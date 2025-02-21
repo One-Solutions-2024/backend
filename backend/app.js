@@ -1213,7 +1213,24 @@ app.get("/api/job-approval-requests", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to fetch requests" });
   }
 });
-
+// New route to get approval requests where current admin is the requester
+app.get("/api/job-approval-requests/requester", authenticateToken, async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT r.*, j.companyname, a.adminname as owner_name 
+      FROM job_approval_requests r
+      JOIN job j ON r.job_id = j.id
+      JOIN admin a ON r.owner_admin_id = a.id
+      WHERE r.requester_admin_id = $1`,
+      [req.user.id]
+    );
+    
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching approval requests:", error);
+    res.status(500).json({ error: "Failed to fetch requests" });
+  }
+});
 // Approve request
 app.post("/api/job-approval-requests/:id/approve", authenticateToken, async (req, res) => {
   try {
