@@ -1226,45 +1226,10 @@ app.post("/api/job-approval-requests/:id/approve", authenticateToken, async (req
     );
 
     // Get request details
-    const request = await pool.query(
+    await pool.query(
       "SELECT * FROM job_approval_requests WHERE id = $1",
       [id]
     );
-
-    // Perform the approved action
-    if (request.rows[0].action === 'edit') {
-      await pool.query(
-        `UPDATE job SET 
-          companyname = $1,
-          title = $2,
-          description = $3,
-          apply_link = $4,
-          image_link = $5,
-          url = $6,
-          salary = $7,
-          location = $8,
-          job_type = $9,
-          experience = $10,
-          batch = $11
-        WHERE id = $12`,
-        [
-          request.rows[0].data.companyname,
-          request.rows[0].data.title,
-          request.rows[0].data.description,
-          request.rows[0].data.apply_link,
-          request.rows[0].data.image_link,
-          request.rows[0].data.url,
-          request.rows[0].data.salary,
-          request.rows[0].data.location,
-          request.rows[0].data.job_type,
-          request.rows[0].data.experience,
-          request.rows[0].data.batch,
-          request.rows[0].job_id
-        ]
-      );
-    } else if (request.rows[0].action === 'delete') {
-      await pool.query("DELETE FROM job WHERE id = $1", [request.rows[0].job_id]);
-    }
 
     res.json({ message: "Request approved and action performed" });
   } catch (error) {
