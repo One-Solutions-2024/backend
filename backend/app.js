@@ -906,6 +906,106 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
   }
 });
 
+// Edit group message
+app.put("/api/chat/messages/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      `UPDATE chat_messages 
+       SET message = $1 
+       WHERE id = $2 AND sender_id = $3
+       RETURNING *`,
+      [message, id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: "Not authorized or message not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Error updating message:", error);
+    res.status(500).json({ error: "Failed to update message" });
+  }
+});
+
+// Delete group message
+app.delete("/api/chat/messages/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const userId = req.user.id;
+
+    const result = await pool.query(
+      `DELETE FROM chat_messages 
+       WHERE id = $1 AND sender_id = $2
+       RETURNING *`,
+      [id, userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: "Not authorized or message not found" });
+    }
+
+    res.json({ message: "Message deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting message:", error);
+    res.status(500).json({ error: "Failed to delete message" });
+  }
+});
+
+// Edit direct message
+app.put("/api/chat/direct-messages/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+    const senderPhone = req.user.phone;
+
+    const result = await pool.query(
+      `UPDATE direct_messages 
+       SET message = $1 
+       WHERE id = $2 AND sender_phone = $3
+       RETURNING *`,
+      [message, id, senderPhone]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: "Not authorized or message not found" });
+    }
+
+    res.json(result.rows[0]);
+  } catch (error) {
+    console.error("Error updating direct message:", error);
+    res.status(500).json({ error: "Failed to update message" });
+  }
+});
+
+// Delete direct message
+app.delete("/api/chat/direct-messages/:id", authenticateToken, async (req, res) => {
+  try {
+    const { id } = req.params;
+    const senderPhone = req.user.phone;
+
+    const result = await pool.query(
+      `DELETE FROM direct_messages 
+       WHERE id = $1 AND sender_phone = $2
+       RETURNING *`,
+      [id, senderPhone]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(403).json({ error: "Not authorized or message not found" });
+    }
+
+    res.json({ message: "Message deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting direct message:", error);
+    res.status(500).json({ error: "Failed to delete message" });
+  }
+});
+
 // Route to get all admins approved only (admin access only)
 app.get("/api/admins/approved", authenticateToken, authorizeAdmin, async (req, res) => {
   try {
