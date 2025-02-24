@@ -839,7 +839,7 @@ app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
   const { recipient_phone, message } = req.body;
   const sender_phone = req.user.phone;
   // Enhanced validation
-  if (!recipient_phone?.match(/^\d{10}$/)) {
+  if (!recipient_phone?.match(/^(\+\d{1,3})?\d{10}$/)) {
     return res.status(400).json({ error: "Invalid recipient phone format" });
   }
 
