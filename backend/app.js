@@ -9,7 +9,69 @@ const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
 const WebSocket = require("ws"); // Add WebSocket support
+const { Server } = require("socket.io"); // Add at top with other imports
+
 require("dotenv").config(); // Load environment variables
+// Initialize Express app
+const app = express();
+
+// Add Socket.IO initialization after creating Express app:
+const server = http.createServer(app);
+const io = new Server(server, {
+  cors: { origin: '*' } // Adjust CORS settings as needed
+});
+// Socket.IO connection handling
+io.use((socket, next) => {
+  const token = socket.handshake.auth.token;
+  if (token) {
+    jwt.verify(token, JWT_SECRET, (err, user) => {
+      if (err) return next(new Error("Authentication error"));
+      socket.user = user;
+      next();
+    });
+  } else {
+    next(new Error("Authentication required"));
+  }
+}).on("connection", (socket) => {
+  console.log("New client connected");
+
+  socket.on("register_phone", (phone) => {
+    socket.userPhone = phone;
+  });
+
+  socket.on("direct_message", async (data) => {
+    try {
+      const { recipient_phone, message } = data;
+      // Validate message and recipient
+      const recipientExists = await pool.query(
+        "SELECT id FROM admin WHERE phone = $1",
+        [recipient_phone]
+      );
+      
+      if (recipientExists.rows.length === 0) {
+        return socket.emit("error", "Recipient not found");
+      }
+
+      // Save to database
+      const result = await pool.query(
+        `INSERT INTO direct_messages (sender_phone, recipient_phone, message)
+         VALUES ($1, $2, $3) RETURNING *`,
+        [socket.user.phone, recipient_phone, message]
+      );
+
+      // Emit to both parties
+      io.to(`user_${recipient_phone}`).emit("new_direct_message", result.rows[0]);
+      socket.emit("message_delivered", result.rows[0]);
+    } catch (error) {
+      console.error("Direct message error:", error);
+      socket.emit("error", "Failed to send message");
+    }
+  });
+
+  socket.on("disconnect", () => {
+    console.log("Client disconnected");
+  });
+});
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
@@ -20,37 +82,6 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false, // This bypasses certificate verification
   },
-});
-// Initialize Express app
-const app = express();
-
-// Create WebSocket server
-const wss = new WebSocket.Server({ noServer: true });
-
-// Backend WebSocket handling
-wss.on('connection', (ws, req) => {
-  console.log("New WebSocket connection");
-  const token = req.headers.authorization?.split(' ')[1];
-
-  if (token) {
-    jwt.verify(token, JWT_SECRET, (err, user) => {
-      if (!err) {
-        ws.userPhone = user.phone; // Attach phone instead of ID
-      }
-    });
-  }
-
-  ws.on('message', (message) => {
-    const data = JSON.parse(message);
-    switch (data.type) {
-      case 'register_phone':
-        ws.userPhone = data.phone;
-        break;
-      case 'direct_message':
-        handleDirectMessage(data);
-        break;
-    }
-  });
 });
 
 // Middleware
@@ -509,17 +540,8 @@ const initializeDbAndServer = async () => {
       console.log("Admin data has been imported successfully.");
     }
 
-
-    // Start server
-    const server = app.listen(PORT, () => {
+    app.listen(PORT, () => {
       console.log(`Server is running on http://localhost:${PORT}/`);
-    });
-
-    // Upgrade HTTP server to WebSocket
-    server.on("upgrade", (request, socket, head) => {
-      wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
     });
 
   } catch (error) {
