@@ -8,9 +8,8 @@ const morgan = require("morgan");
 const jwt = require("jsonwebtoken");
 const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
-const WebSocket = require("ws"); // Add WebSocket support
-const { Server } = require("socket.io"); // Add at top with other imports
-
+const http = require('http');
+const { Server } = require('socket.io');
 require("dotenv").config(); // Load environment variables
 // Initialize Express app
 const app = express();
