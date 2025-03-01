@@ -1266,11 +1266,11 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
 // Create approval request
 app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
   try {
-    const { jobId, action, data, owner_admin_id, requester_image } = req.body;
+    const { jobId, action, data, owner_admin_id } = req.body;
     const requesterAdminId = req.user.id;
 
     // Validate request
-    if (!jobId || !action || !owner_admin_id || !requester_image) {
+    if (!jobId || !action || !owner_admin_id) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -1283,10 +1283,10 @@ app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
     // Insert request
     const result = await pool.query(
       `INSERT INTO job_approval_requests 
-      (job_id, requester_admin_id, owner_admin_id, action, requester_image, data)
-      VALUES ($1, $2, $3, $4, $5, $6)
+      (job_id, requester_admin_id, owner_admin_id, action, data)
+      VALUES ($1, $2, $3, $4, $5)
       RETURNING *`,
-      [jobId, requesterAdminId, owner_admin_id, action, requester_image, data || null]
+      [jobId, requesterAdminId, owner_admin_id, action, data || null]
     );
 
     res.status(201).json(result.rows[0]);
@@ -1295,6 +1295,7 @@ app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
     res.status(500).json({ error: "Failed to create request" });
   }
 });
+
 
 // Get pending approval requests for current admin
 app.get("/api/job-approval-requests", authenticateToken, async (req, res) => {
