@@ -1241,6 +1241,7 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
   try {
     let query = `
       SELECT j.*, 
+        creator.admin_image_link as creator_admin_image,
         creator.adminname as creator_name,
         approver.adminname as approver_name
       FROM job j
