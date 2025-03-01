@@ -415,13 +415,13 @@ const initializeDbAndServer = async () => {
           job_id INT NOT NULL REFERENCES job(id),
           requester_admin_id INT NOT NULL REFERENCES admin(id),
           owner_admin_id INT NOT NULL REFERENCES admin(id),
+          requester_image TEXT, -- Keep as regular TEXT instead of foreign key
           action VARCHAR(10) NOT NULL,
           data JSONB,
           status VARCHAR(10) DEFAULT 'pending',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
-
 
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
@@ -1265,11 +1265,11 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
 // Create approval request
 app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
   try {
-    const { jobId, action, data, owner_admin_id } = req.body;
+    const { jobId, action, data, owner_admin_id, requester_image } = req.body;
     const requesterAdminId = req.user.id;
 
     // Validate request
-    if (!jobId || !action || !owner_admin_id) {
+    if (!jobId || !action || !owner_admin_id || !requester_image) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
@@ -1282,10 +1282,10 @@ app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
     // Insert request
     const result = await pool.query(
       `INSERT INTO job_approval_requests 
-      (job_id, requester_admin_id, owner_admin_id, action, data)
-      VALUES ($1, $2, $3, $4, $5)
+      (job_id, requester_admin_id, owner_admin_id, action, requester_image, data)
+      VALUES ($1, $2, $3, $4, $5, $6)
       RETURNING *`,
-      [jobId, requesterAdminId, owner_admin_id, action, data || null]
+      [jobId, requesterAdminId, owner_admin_id, action, requester_image, data || null]
     );
 
     res.status(201).json(result.rows[0]);
@@ -1299,7 +1299,7 @@ app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
 app.get("/api/job-approval-requests", authenticateToken, async (req, res) => {
   try {
     const result = await pool.query(
-      `SELECT r.*, j.companyname, a.adminname as requester_name 
+      `SELECT r.*, j.companyname, a.adminname as requester_name, a.admin_image_link AS requester_image
       FROM job_approval_requests r
       JOIN job j ON r.job_id = j.id
       JOIN admin a ON r.requester_admin_id = a.id
