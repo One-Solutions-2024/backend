@@ -10,7 +10,10 @@ const fs = require("fs").promises;
 const bcrypt = require("bcrypt");
 const WebSocket = require("ws"); // Add WebSocket support
 require("dotenv").config(); // Load environment variables
-
+// Add these missing imports at the top
+const cheerio = require("cheerio");
+const axios = require("axios");
+const cron = require("node-cron");
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
 
@@ -21,6 +24,8 @@ const pool = new Pool({
     rejectUnauthorized: false, // This bypasses certificate verification
   },
 });
+
+
 // Initialize Express app
 const app = express();
 
@@ -52,6 +57,199 @@ wss.on('connection', (ws, req) => {
     }
   });
 });
+
+
+// Allowed companies list
+const allowedCompanies = [
+  'hitachi', 'epsilon', 'swiggy', 'zomato', 'iqvia', 
+  'yash technologies', 'wipro', 'infosys', 'synopsys', 
+  'zebra', 'tech mahindra', 'zycus', 'cisco', 'qualcomm', 
+  'fresh prints', 'sagility', 'siemens', 'amazon', 
+  'capgemini', 'motorola', 'blinkit', 'ey', 'aptivi', 
+  'cognizant', 'genpact', 'tcs'
+];
+
+// Company image mapping - Update paths according to your local storage
+const companyImages = {
+  'hitachi': '/company-logos/hitachi_one_solutions.png',
+  'epsilon': '/company-logos/epsilon_one_solutions.png',
+  'swiggy': '/company-logos/swiggy_one_solutions.png',
+  'zomato': '/company-logos/zomato_one_solutions.png',
+  'iqvia': '/company-logos/iqvia_one_solutions.png',
+  'yash technologies': '/company-logos/yash-technologies_one_solutions.png',
+  'wipro': '/company-logos/wipro_one_solutions.png',
+  'infosys': '/company-logos/infosys_one_solutions.png',
+  'synopsys': '/company-logos/synopsys_one_solutions.png',
+  'zebra': '/company-logos/zebra_one_solutions.png',
+  'tech mahindra': '/company-logos/tech-mahindra_one_solutions.png',
+  'zycus': '/company-logos/zycus_one_solutions.png',
+  'cisco': '/company-logos/cisco_one_solutions.png',
+  'qualcomm': '/company-logos/qualcomm_one_solutions.png',
+  'fresh prints': '/company-logos/fresh-prints_one_solutions.png',
+  'sagility': '/company-logos/sagility_one_solutions.png',
+  'siemens': '/company-logos/siemens_one_solutions.png',
+  'amazon': '/company-logos/amazon_one_solutions.png',
+  'capgemini': '/company-logos/capgemini_one_solutions.png',
+  'motorola': '/company-logos/motorola_one_solutions.png',
+  'blinkit': '/company-logos/blinkit_one_solutions.png',
+  'ey': '/company-logos/ey_one_job_notifications.png',
+  'aptivi': '/company-logos/aptivi_one_solutions.png',
+  'cognizant': '/company-logos/cognizant_one_solutions.png',
+  'genpact': '/company-logos/genpact_one_solutions.png',
+  'tcs': '/company-logos/tcs_one_solutions.png'
+};
+// Serve static company images
+app.use('/company-logos', express.static('C:\Users\ekmgb\Dropbox\PC\Downloads\One Solutions\company_images'));
+
+// Job sources configuration
+const jobSources = [
+  {
+    name: 'LinkedIn Target Companies',
+    type: 'api',
+    url: (page) => {
+      const keywords = allowedCompanies.map(c => encodeURIComponent(`"${c}"`)).join('%20');
+      return `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${keywords}&location=India&f_TPR=r86400&start=${page * 25}`;
+    },
+    parser: linkedInParser,
+    pages: 5,
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      'Accept-Language': 'en-US,en;q=0.9'
+    }
+  }
+];
+
+async function linkedInParser(html) {
+  const jobs = [];
+  try {
+    const $ = cheerio.load(html);
+
+    $('li').each((i, el) => {
+      try {
+        // Update selectors based on LinkedIn's current structure
+        const titleElem = $(el).find('h3.base-search-card__title');
+        const companyElem = $(el).find('h4.base-search-card__subtitle');
+        const locationElem = $(el).find('span.job-search-card__location');
+        const linkElem = $(el).find('a.base-card__full-link');
+
+        const title = titleElem.text().trim();
+        const company = companyElem.text().trim().replace(/·\s*/, '');
+        const location = locationElem.text().trim();
+        const rawUrl = linkElem.attr('href') || '';
+
+        // Normalize URL
+        const cleanUrl = new URL(rawUrl.split('?')[0]).toString();
+
+        // Enhanced company matching
+        const normalizedCompany = company.toLowerCase().replace(/[^a-z0-9]/g, '');
+        const matchedCompany = allowedCompanies.find(c => {
+          const allowed = c.toLowerCase().replace(/[^a-z0-9]/g, '');
+          return normalizedCompany.includes(allowed);
+        });
+
+        if (!matchedCompany) return;
+
+        // Get company image
+        const companyKey = matchedCompany.toLowerCase();
+        const companyImage = companyImages[companyKey] || '/company-logos/default.png';
+
+        jobs.push({
+          companyname: matchedCompany, // Use the matched company name from allowed list
+          title,
+          description: `Job opportunity for ${title} at ${matchedCompany}. Requirements: Check company website for details.`,
+          apply_link: cleanUrl,
+          image_link: companyImage,
+          url: cleanUrl,
+          salary: 'Not disclosed',
+          location,
+          job_type: 'Full-time',
+          experience: 'Fresher',
+          batch: 'N/A',
+          job_uploader: 'LinkedIn Scraper'
+        });
+      } catch (err) {
+        console.error('Error parsing job element:', err);
+      }
+    });
+  } catch (err) {
+    console.error('LinkedIn parser error:', err);
+  }
+  return jobs;
+}
+
+// Scrape and store jobs
+const scrapeJobs = async () => {
+  let totalJobs = 0;
+  
+  for (const source of jobSources) {
+    try {
+      console.log(`[Scraper] Scraping ${source.name}...`);
+      let allJobs = [];
+
+      if (source.type === 'api') {
+        for (let page = 0; page < source.pages; page++) {
+          let html = '';
+          try {
+            const url = typeof source.url === 'function' ? source.url(page) : source.url;
+            const response = await axios.get(url, { 
+              headers: source.headers, 
+              timeout: 25000 
+            });
+            html = response.data;
+            const jobs = await source.parser(html);
+            allJobs = [...allJobs, ...jobs];
+            await new Promise(resolve => setTimeout(resolve, 5000));
+          } catch (err) {
+            console.error(`Error fetching page ${page}: ${err.message}`);
+          }
+        }
+      }
+
+      console.log(`Found ${allJobs.length} valid jobs from ${source.name}`);
+
+      // Database insertion
+      for (const job of allJobs) {
+        try {
+          const existing = await pool.query(
+            'SELECT 1 FROM job WHERE url = $1', [job.url]
+          );
+          
+          if (!existing.rows.length) {
+            await pool.query(
+              `INSERT INTO job (
+                companyname, title, description, apply_link, image_link, url, 
+                salary, location, job_type, experience, batch, job_uploader
+              ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
+              [
+                job.companyname,
+                job.title,
+                job.description,
+                job.apply_link,
+                job.image_link,
+                job.url,
+                job.salary,
+                job.location,
+                job.job_type,
+                job.experience,
+                job.batch,
+                job.job_uploader
+              ]
+            );
+            totalJobs++;
+          }
+        } catch (err) {
+          console.error(`DB Error for ${job.url}:`, err.message);
+        }
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+    } catch (error) {
+      console.error(`[Scraper] Error in ${source.name}:`, error.message);
+    }
+    await new Promise(resolve => setTimeout(resolve, 10000));
+  }
+  return totalJobs;
+};
+
 
 // Middleware
 app.use(express.json());
@@ -520,6 +718,21 @@ const initializeDbAndServer = async () => {
       wss.handleUpgrade(request, socket, head, (ws) => {
         wss.emit("connection", ws, request);
       });
+    });
+
+    (async () => {
+      try {
+        const count = await scrapeJobs();
+        console.log(`Initial scrape completed: ${count} jobs added`);
+      } catch (err) {
+        console.error('Initialization error:', err);
+      }
+    })();
+
+    // Daily scrape at 2 AM
+    cron.schedule('0 2 * * *', () => {
+      console.log('[Cron] Starting daily scrape');
+      scrapeJobs();
     });
 
   } catch (error) {
