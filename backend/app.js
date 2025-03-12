@@ -99,71 +99,82 @@ const companyImages = {
   'tcs': '/company-logos/tcs_one_solutions.png'
 };
 // Serve static company images
-app.use('/company-logos', express.static('C:\Users\ekmgb\Dropbox\PC\Downloads\One Solutions\company_images'));
-
+// Change backslashes to forward slashes
+app.use('/company-logos', express.static('C:/Users/ekmgb/Dropbox/PC/Downloads/One Solutions/company_images'));
 // Job sources configuration
 const jobSources = [
   {
-    name: 'LinkedIn Target Companies',
+    name: 'LinkedIn Developers',
     type: 'api',
     url: (page) => {
-      const keywords = allowedCompanies.map(c => encodeURIComponent(`"${c}"`)).join('%20');
-      return `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${keywords}&location=India&f_TPR=r86400&start=${page * 25}`;
+      const keywords = encodeURIComponent(`"software developer" (fresher OR entry level)`);
+      return `https://www.linkedin.com/jobs-guest/jobs/api/seeMoreJobPostings/search?keywords=${keywords}&location=India&start=${page * 25}`;
     },
     parser: linkedInParser,
     pages: 5,
     headers: {
       'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-      'Accept-Language': 'en-US,en;q=0.9'
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+      'Referer': 'https://www.linkedin.com/jobs/'
     }
   }
 ];
 
+// Enhanced LinkedIn Parser
 async function linkedInParser(html) {
   const jobs = [];
   try {
     const $ = cheerio.load(html);
-
-    $('li').each((i, el) => {
+    
+    // Updated container selector to div.base-card
+    $('div.base-card').each((i, el) => {
       try {
-        // Update selectors based on LinkedIn's current structure
-        const titleElem = $(el).find('h3.base-search-card__title');
-        const companyElem = $(el).find('h4.base-search-card__subtitle');
-        const locationElem = $(el).find('span.job-search-card__location');
+        // Updated selectors for title and company
+        const titleElem = $(el).find('.base-search-card__title');
+        const companyElem = $(el).find('.base-search-card__subtitle');
+        const locationElem = $(el).find('.job-search-card__location');
         const linkElem = $(el).find('a.base-card__full-link');
+        const description = $(el).find('.job-search-card__description').text().trim();
+
+        // Basic element validation
+        if (!titleElem.length || !companyElem.length) {
+          console.log('Skipping element - missing title or company');
+          return;
+        }
 
         const title = titleElem.text().trim();
-        const company = companyElem.text().trim().replace(/·\s*/, '');
+        const company = companyElem.text().trim().replace(/\s+/g, ' ');
         const location = locationElem.text().trim();
         const rawUrl = linkElem.attr('href') || '';
 
-        // Normalize URL
-        const cleanUrl = new URL(rawUrl.split('?')[0]).toString();
+        // Improved URL normalization
+        const cleanUrl = rawUrl.split('?')[0]
+          .replace(/\/\//g, '/')
+          .replace('https:/', 'https://');
 
-        // Enhanced company matching
-        const normalizedCompany = company.toLowerCase().replace(/[^a-z0-9]/g, '');
-        const matchedCompany = allowedCompanies.find(c => {
-          const allowed = c.toLowerCase().replace(/[^a-z0-9]/g, '');
-          return normalizedCompany.includes(allowed);
-        });
-
-        if (!matchedCompany) return;
+        // Experience extraction
+        const experienceMatch = description.match(/(\d+-\d+\s+years? experience|fresher|entry level)/i)
+          || title.match(/(fresher|entry level)/i);
+        
+        // Salary extraction
+        const salaryMatch = description.match(/(₹[\d,]+ - ₹[\d,]+)\s*(?:per\syear|a\syear)/i);
 
         // Get company image
-        const companyKey = matchedCompany.toLowerCase();
-        const companyImage = companyImages[companyKey] || '/company-logos/default.png';
+        const logoElem = $(el).find('img.artdeco-entity-image');
+        let companyImage = logoElem.attr('data-delayed-url') || logoElem.attr('src');
 
         jobs.push({
-          companyname: matchedCompany, // Use the matched company name from allowed list
-          title,
-          description: `Job opportunity for ${title} at ${matchedCompany}. Requirements: Check company website for details.`,
+          companyname: company,
+          title: title,
+          description: description || 'Check company website for details',
           apply_link: cleanUrl,
-          image_link: companyImage,
+          image_link: companyImage || '/company-logos/default.png',
           url: cleanUrl,
-          salary: 'Not disclosed',
-          location,
-          job_type: 'Full-time',
-          experience: 'Fresher',
+          salary: salaryMatch ? salaryMatch[1] : 'Not disclosed',
+          location: location,
+          job_type: description.includes('Part-time') ? 'Part-time' : 'Full-time',
+          experience: experienceMatch ? experienceMatch[0] : 'Fresher',
           batch: 'N/A',
           job_uploader: 'LinkedIn Scraper'
         });
@@ -174,10 +185,15 @@ async function linkedInParser(html) {
   } catch (err) {
     console.error('LinkedIn parser error:', err);
   }
-  return jobs;
+  
+  console.log(`Parsed ${jobs.length} jobs from current page`);
+  return jobs.filter(job => 
+    /(fresher|entry level|0-2 years)/i.test(job.title) &&
+    !/(senior|manager|lead|sr\.)/i.test(job.title)
+  );
 }
 
-// Scrape and store jobs
+// Enhanced scrapeJobs function with delays
 const scrapeJobs = async () => {
   let totalJobs = 0;
   
@@ -188,17 +204,21 @@ const scrapeJobs = async () => {
 
       if (source.type === 'api') {
         for (let page = 0; page < source.pages; page++) {
-          let html = '';
           try {
             const url = typeof source.url === 'function' ? source.url(page) : source.url;
+            console.log(`Scraping page ${page}: ${url}`);
+            
             const response = await axios.get(url, { 
-              headers: source.headers, 
-              timeout: 25000 
+              headers: source.headers,
+              timeout: 30000
             });
-            html = response.data;
-            const jobs = await source.parser(html);
+            
+            const jobs = await source.parser(response.data);
             allJobs = [...allJobs, ...jobs];
-            await new Promise(resolve => setTimeout(resolve, 5000));
+            
+            // Randomized delay between pages (5-15 seconds)
+            const delay = Math.floor(Math.random() * 10000) + 5000;
+            await new Promise(resolve => setTimeout(resolve, delay));
           } catch (err) {
             console.error(`Error fetching page ${page}: ${err.message}`);
           }
@@ -235,21 +255,22 @@ const scrapeJobs = async () => {
                 job.job_uploader
               ]
             );
-            totalJobs++;
-          }
-        } catch (err) {
-          console.error(`DB Error for ${job.url}:`, err.message);
+          totalJobs++;
         }
-        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (err) {
+        console.error(`DB Error for ${job.url}:`, err.message);
       }
-    } catch (error) {
-      console.error(`[Scraper] Error in ${source.name}:`, error.message);
+      // Short delay between inserts
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
-    await new Promise(resolve => setTimeout(resolve, 10000));
+  } catch (error) {
+    console.error(`[Scraper] Error in ${source.name}:`, error.message);
   }
-  return totalJobs;
+  // Longer delay between sources
+  await new Promise(resolve => setTimeout(resolve, 15000));
+}
+return totalJobs;
 };
-
 
 // Middleware
 app.use(express.json());
