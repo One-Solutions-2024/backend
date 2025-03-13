@@ -124,6 +124,21 @@ const jobSources = [
 // Enhanced LinkedIn Parser
 async function linkedInParser(html) {
   const jobs = [];
+
+  // Helper to slugify company name by removing spaces entirely
+  function slugifyCompany(text) {
+    return text.toLowerCase().replace(/\s+/g, '');
+  }
+  
+  // Helper to create a URL slug: lower case, spaces to hyphens, remove non-word characters
+  function slugify(text) {
+    return text
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, '-')
+      .replace(/[^\w-]+/g, '');
+  }
+  
   try {
     const $ = cheerio.load(html);
     
@@ -148,7 +163,7 @@ async function linkedInParser(html) {
         const location = locationElem.text().trim();
         const rawUrl = linkElem.attr('href') || '';
 
-        // Improved URL normalization
+        // Improved URL normalization for the apply link
         const cleanUrl = rawUrl.split('?')[0]
           .replace(/\/\//g, '/')
           .replace('https:/', 'https://');
@@ -164,13 +179,20 @@ async function linkedInParser(html) {
         const logoElem = $(el).find('img.artdeco-entity-image');
         let companyImage = logoElem.attr('data-delayed-url') || logoElem.attr('src');
 
+        // Create slug for URL structure: companyName-location-salary
+        const companySlug = slugifyCompany(company);
+        const locationSlug = slugify(location);
+        const salaryValue = salaryMatch ? salaryMatch[1] : 'not disclosed';
+        const salarySlug = slugify(salaryValue);
+        const constructedUrl = `${companySlug}-${locationSlug}-${salarySlug}`;
+
         jobs.push({
           companyname: company,
           title: title,
           description: description || 'Check company website for details',
-          apply_link: cleanUrl,
+          apply_link: cleanUrl, // remains the normalized clean URL
           image_link: companyImage || '/company-logos/default.png',
-          url: cleanUrl,
+          url: constructedUrl, // now structured as companyname-location-salary
           salary: salaryMatch ? salaryMatch[1] : 'Not disclosed',
           location: location,
           job_type: description.includes('Part-time') ? 'Part-time' : 'Full-time',
@@ -192,6 +214,7 @@ async function linkedInParser(html) {
     !/(senior|manager|lead|sr\.)/i.test(job.title)
   );
 }
+
 
 // Enhanced scrapeJobs function with delays
 const scrapeJobs = async () => {
