@@ -187,7 +187,7 @@ async function linkedInParser(html) {
         const constructedUrl = `${companySlug}-${locationSlug}-${salarySlug}`;
 
         jobs.push({
-          companyname: company,
+          companyname: companySlug,
           title: title,
           description: description || 'Check company website for details',
           apply_link: cleanUrl, // remains the normalized clean URL
