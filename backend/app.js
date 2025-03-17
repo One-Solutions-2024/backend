@@ -1642,24 +1642,24 @@ const isFirstAdmin = async (adminId) => {
 };
 
 // Route to delete a job (admin access only)
+// Delete job route
 app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
     const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
-    const adminIsFirst = await isFirstAdmin(req.user.id);
-    
-    if (!adminIsFirst) {
-      // Existing ownership checks
-      if (job.created_by !== req.user.id) {
-        return res.status(403).json({ error: "Not authorized" });
-      }
-    }
     if (!existingJob.rows.length) {
       return res.status(404).json({ error: "Job not found" });
     }
-    const deleteJobQuery = `DELETE FROM job WHERE id = $1;`;
-    await pool.query(deleteJobQuery, [id]);
+
+    const job = existingJob.rows[0];
+    const adminIsFirst = await isFirstAdmin(req.user.id);
+
+    if (!adminIsFirst && job.created_by !== req.user.id) {
+      return res.status(403).json({ error: "Not authorized" });
+    }
+
+    await pool.query("DELETE FROM job WHERE id = $1;", [id]);
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
     console.error(`Error deleting job: ${error.message}`);
@@ -1739,15 +1739,16 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
 
   try {
     const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
-    const adminIsFirst = await isFirstAdmin(req.user.id);
-    if (!adminIsFirst) {
-      // Existing ownership checks
-      if (job.created_by !== req.user.id) {
-        return res.status(403).json({ error: "Not authorized" });
-      }
-    }
+   
     if (!existingJob.rows.length) {
       return res.status(404).json({ error: "Job not found" });
+    }
+
+    const job = existingJob.rows[0];
+    const adminIsFirst = await isFirstAdmin(req.user.id);
+
+    if (!adminIsFirst && job.created_by !== req.user.id) {
+      return res.status(403).json({ error: "Not authorized" });
     }
 
     // Fetch admin details to get adminname
