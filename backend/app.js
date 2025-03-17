@@ -420,6 +420,7 @@ app.post("/api/admin/login", async (req, res) => {
     }
 
     const admin = adminResult.rows[0];
+    const isFirstAdmin = admin.created_by === null && admin.is_approved;
 
     if (admin.status !== 'approved') {
       return res.status(403).json({ error: "Account pending approval" });
@@ -450,7 +451,8 @@ app.post("/api/admin/login", async (req, res) => {
         username: admin.username,
         phone: admin.phone,
         admin_image_link: admin.admin_image_link,
-        status: admin.status
+        status: admin.status,
+        isFirstAdmin
       }
     });
   } catch (error) {
@@ -1631,6 +1633,13 @@ app.post("/api/job-approval-requests/:id/reject", authenticateToken, async (req,
   }
 });
 
+const isFirstAdmin = async (adminId) => {
+  const result = await pool.query(
+    "SELECT created_by, is_approved FROM admin WHERE id = $1",
+    [adminId]
+  );
+  return result.rows[0].created_by === null && result.rows[0].is_approved;
+};
 
 // Route to delete a job (admin access only)
 app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
@@ -1638,7 +1647,14 @@ app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) 
 
   try {
     const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
-
+    const adminIsFirst = await isFirstAdmin(req.user.id);
+    
+    if (!adminIsFirst) {
+      // Existing ownership checks
+      if (job.created_by !== req.user.id) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+    }
     if (!existingJob.rows.length) {
       return res.status(404).json({ error: "Job not found" });
     }
@@ -1723,7 +1739,13 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
 
   try {
     const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
-
+    const adminIsFirst = await isFirstAdmin(req.user.id);
+    if (!adminIsFirst) {
+      // Existing ownership checks
+      if (job.created_by !== req.user.id) {
+        return res.status(403).json({ error: "Not authorized" });
+      }
+    }
     if (!existingJob.rows.length) {
       return res.status(404).json({ error: "Job not found" });
     }
