@@ -350,6 +350,7 @@ const initializeDbAndServer = async () => {
         UNIQUE (job_id, ip_address)
     );
     `);
+
     // Create popup_content table
     await pool.query(`
           CREATE TABLE IF NOT EXISTS popup_content (
@@ -532,14 +533,7 @@ const initializeDbAndServer = async () => {
       });
     });
 
-    (async () => {
-      try {
-        const count = await scrapeJobs();
-        console.log(`Initial scrape completed: ${count} jobs added`);
-      } catch (err) {
-        console.error('Initialization error:', err);
-      }
-    })();
+    
 
     // Daily scrape at 2 AM
     cron.schedule('0 2 * * *', () => {
@@ -552,6 +546,7 @@ const initializeDbAndServer = async () => {
     process.exit(1);
   }
 };
+
 
 // Add this route to get session status
 app.get('/api/session/status', authenticateToken, async (req, res) => {
@@ -1433,6 +1428,26 @@ app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) 
   }
 });
 
+// Add this route before your existing delete route
+app.post("/api/jobs/confirm-delete/:id", authenticateToken, authorizeAdmin, async (req, res) => {
+  const { id } = req.params;
+  
+  try {
+    const jobViews = await pool.query(
+      "SELECT COUNT(*) FROM job_viewers WHERE job_id = $1",
+      [id]
+    );
+    const viewCount = jobViews.rows[0].count;
+
+    res.json({
+      message: `Deleting this job will also remove ${viewCount} associated views.`,
+      viewCount
+    });
+  } catch (error) {
+    console.error(`Error getting view count: ${error.message}`);
+    res.status(500).json({ error: "Failed to get view data" });
+  }
+});
 // Route to add a new job (admin access only, with validation)
 app.post(
   "/api/jobs",
