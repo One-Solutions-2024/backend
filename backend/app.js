@@ -350,7 +350,14 @@ const initializeDbAndServer = async () => {
         UNIQUE (job_id, ip_address)
     );
     `);
+await pool.query(`ALTER TABLE job_viewers
+DROP CONSTRAINT IF EXISTS job_viewers_job_id_fkey;`);
 
+await pool.query(`ALTER TABLE job_viewers
+ADD CONSTRAINT job_viewers_job_id_fkey
+FOREIGN KEY (job_id)
+REFERENCES job(id)
+ON DELETE CASCADE;`);
     // Create popup_content table
     await pool.query(`
           CREATE TABLE IF NOT EXISTS popup_content (
