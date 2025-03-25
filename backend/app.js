@@ -60,7 +60,6 @@ wss.on('connection', (ws, req) => {
 
 
 
-
 // Middleware
 app.use(express.json());
 app.use(cors());
@@ -532,20 +531,6 @@ const initializeDbAndServer = async () => {
       });
     });
 
-    (async () => {
-      try {
-        const count = await scrapeJobs();
-        console.log(`Initial scrape completed: ${count} jobs added`);
-      } catch (err) {
-        console.error('Initialization error:', err);
-      }
-    })();
-
-    // Daily scrape at 2 AM
-    cron.schedule('0 2 * * *', () => {
-      console.log('[Cron] Starting daily scrape');
-      scrapeJobs();
-    });
 
   } catch (error) {
     console.error(`Error initializing the database: ${error.message}`);
