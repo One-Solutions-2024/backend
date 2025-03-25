@@ -1394,23 +1394,21 @@ const isFirstAdmin = async (adminId) => {
 
 // Route to delete a job (admin access only)
 // Delete job route
+// In your DELETE /api/jobs/:id route
 app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
-    const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
-    if (!existingJob.rows.length) {
+    // First delete related viewers
+    await pool.query("DELETE FROM job_viewers WHERE job_id = $1;", [id]);
+    
+    // Then delete the job
+    const result = await pool.query("DELETE FROM job WHERE id = $1 RETURNING *;", [id]);
+    
+    if (result.rows.length === 0) {
       return res.status(404).json({ error: "Job not found" });
     }
-
-    const job = existingJob.rows[0];
-    const adminIsFirst = await isFirstAdmin(req.user.id);
-
-    if (!adminIsFirst && job.created_by !== req.user.id) {
-      return res.status(403).json({ error: "Not authorized" });
-    }
-
-    await pool.query("DELETE FROM job WHERE id = $1;", [id]);
+    
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
     console.error(`Error deleting job: ${error.message}`);
