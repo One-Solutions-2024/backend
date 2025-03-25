@@ -1274,136 +1274,19 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
 // Add these routes after your existing job routes
 
 // Create approval request
-app.post("/api/job-approval-requests", authenticateToken, async (req, res) => {
-  try {
-    const { jobId, action, data, owner_admin_id } = req.body;
-    const requesterAdminId = req.user.id;
-
-    // Validate request
-    if (!jobId || !action || !owner_admin_id) {
-      return res.status(400).json({ error: "Missing required fields" });
-    }
-
-    // Check if job exists
-    const jobExists = await pool.query("SELECT id FROM job WHERE id = $1", [jobId]);
-    if (jobExists.rows.length === 0) {
-      return res.status(404).json({ error: "Job not found" });
-    }
-
-    // Insert request
-    const result = await pool.query(
-      `INSERT INTO job_approval_requests 
-      (job_id, requester_admin_id, owner_admin_id, action, data)
-      VALUES ($1, $2, $3, $4, $5)
-      RETURNING *`,
-      [jobId, requesterAdminId, owner_admin_id, action, data || null]
-    );
-
-    res.status(201).json(result.rows[0]);
-  } catch (error) {
-    console.error("Error creating approval request:", error);
-    res.status(500).json({ error: "Failed to create request" });
-  }
-});
-
-
-// Get pending approval requests for current admin
-app.get("/api/job-approval-requests", authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT r.*, j.companyname, a.adminname as requester_name, a.admin_image_link AS requester_image
-      FROM job_approval_requests r
-      JOIN job j ON r.job_id = j.id
-      JOIN admin a ON r.requester_admin_id = a.id
-      WHERE r.owner_admin_id = $1 AND r.status = 'pending'`,
-      [req.user.id]
-    );
-    
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Error fetching approval requests:", error);
-    res.status(500).json({ error: "Failed to fetch requests" });
-  }
-});
-// New route to get approval requests where current admin is the requester
-app.get("/api/job-approval-requests/requester", authenticateToken, async (req, res) => {
-  try {
-    const result = await pool.query(
-      `SELECT r.*, j.companyname, a.adminname as owner_name 
-      FROM job_approval_requests r
-      JOIN job j ON r.job_id = j.id
-      JOIN admin a ON r.owner_admin_id = a.id
-      WHERE r.requester_admin_id = $1`,
-      [req.user.id]
-    );
-    
-    res.json(result.rows);
-  } catch (error) {
-    console.error("Error fetching approval requests:", error);
-    res.status(500).json({ error: "Failed to fetch requests" });
-  }
-});
-// Approve request
-app.post("/api/job-approval-requests/:id/approve", authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    // Update request status
-    await pool.query(
-      "UPDATE job_approval_requests SET status = 'approved' WHERE id = $1",
-      [id]
-    );
-
-    // Get request details
-    await pool.query(
-      "SELECT * FROM job_approval_requests WHERE id = $1",
-      [id]
-    );
-
-    res.json({ message: "Request approved and action performed" });
-  } catch (error) {
-    console.error("Error approving request:", error);
-    res.status(500).json({ error: "Failed to approve request" });
-  }
-});
-
-// Reject request
-app.post("/api/job-approval-requests/:id/reject", authenticateToken, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    await pool.query(
-      "UPDATE job_approval_requests SET status = 'rejected' WHERE id = $1",
-      [id]
-    );
-
-    res.json({ message: "Request rejected" });
-  } catch (error) {
-    console.error("Error rejecting request:", error);
-    res.status(500).json({ error: "Failed to reject request" });
-  }
-});
-
-const isFirstAdmin = async (adminId) => {
-  const result = await pool.query(
-    "SELECT created_by, is_approved FROM admin WHERE id = $1",
-    [adminId]
-  );
-  return result.rows[0].created_by === null && result.rows[0].is_approved;
-};
-
-// Route to delete a job (admin access only)
-// Delete job route
-// In your DELETE /api/jobs/:id route
+// Modify the DELETE /api/jobs/:id route
 app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
   const { id } = req.params;
 
   try {
-    // First delete related viewers
-    await pool.query("DELETE FROM job_viewers WHERE job_id = $1;", [id]);
+    // Delete related approval requests first
+    await pool.query("DELETE FROM job_approval_requests WHERE job_id = $1", [id]);
+    
+    // Delete related viewers
+    await pool.query("DELETE FROM job_viewers WHERE job_id = $1", [id]);
     
     // Then delete the job
-    const result = await pool.query("DELETE FROM job WHERE id = $1 RETURNING *;", [id]);
+    const result = await pool.query("DELETE FROM job WHERE id = $1 RETURNING *", [id]);
     
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Job not found" });
@@ -1415,6 +1298,15 @@ app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) 
     res.status(500).json({ error: "Failed to delete job" });
   }
 });
+
+const isFirstAdmin = async (adminId) => {
+  const result = await pool.query(
+    "SELECT created_by, is_approved FROM admin WHERE id = $1",
+    [adminId]
+  );
+  return result.rows[0].created_by === null && result.rows[0].is_approved;
+};
+
 
 // Route to add a new job (admin access only, with validation)
 app.post(
