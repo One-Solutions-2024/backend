@@ -1423,7 +1423,8 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
 
   const getJobByCompanyNameQuery = `
     SELECT * FROM job 
-    WHERE REPLACE(LOWER(companyname), ' ', '') = REPLACE(LOWER($1), ' ', '') 
+    WHERE 
+      regexp_replace(LOWER(companyname), '[^a-z0-9]', '', 'g') = regexp_replace(LOWER($1), '[^a-z0-9]', '', 'g')
       AND LOWER(url) = LOWER($2);
   `;
 
