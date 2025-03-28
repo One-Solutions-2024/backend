@@ -1422,7 +1422,9 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
   const { companyname, url } = req.params;
 
   const getJobByCompanyNameQuery = `
-    SELECT * FROM job WHERE LOWER(companyname) = LOWER($1) AND LOWER(url) = LOWER($2);
+    SELECT * FROM job 
+    WHERE REPLACE(LOWER(companyname), ' ', '') = REPLACE(LOWER($1), ' ', '') 
+      AND LOWER(url) = LOWER($2);
   `;
 
   try {
@@ -1438,6 +1440,9 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     res.status(500).json({ error: "Failed to fetch job" });
   }
 });
+
+
+
 app.post("/api/jobs/:id/view", async (req, res) => {
   const { id } = req.params;
   const ipAddress = getClientIp(req);
