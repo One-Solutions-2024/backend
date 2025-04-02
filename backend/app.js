@@ -395,8 +395,8 @@ const initializeDbAndServer = async () => {
         );
       `);
 
-            // Add new tables
-      await pool.query(`
+    // Add new tables
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS admin_sessions (
           id SERIAL PRIMARY KEY,
           admin_id INT REFERENCES admin(id),
@@ -406,7 +406,7 @@ const initializeDbAndServer = async () => {
         );
       `);
 
-      await pool.query(`
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS monthly_reports (
           id SERIAL PRIMARY KEY,
           admin_id INT REFERENCES admin(id),
@@ -417,8 +417,8 @@ const initializeDbAndServer = async () => {
         );
       `);
 
-      // Add these to your existing table creation
-      await pool.query(`
+    // Add these to your existing table creation
+    await pool.query(`
         CREATE TABLE IF NOT EXISTS job_approval_requests (
           id SERIAL PRIMARY KEY,
           job_id INT NOT NULL REFERENCES job(id),
@@ -431,6 +431,19 @@ const initializeDbAndServer = async () => {
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
       `);
+
+    // Add new table for tracking clicks
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS job_clicks (
+    id SERIAL PRIMARY KEY,
+    job_id INT NOT NULL REFERENCES job(id) ON DELETE CASCADE,
+    ip_address TEXT NOT NULL,
+    clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (job_id, ip_address)
+  );
+`);
+
+
 
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
@@ -538,11 +551,42 @@ const initializeDbAndServer = async () => {
   }
 };
 
+// Route to record apply clicks
+app.post("/api/jobs/:id/click", async (req, res) => {
+  const { id } = req.params;
+  const ipAddress = getClientIp(req);
+
+  try {
+    const query = `
+      INSERT INTO job_clicks (job_id, ip_address, clicked_at)
+      VALUES ($1, $2, CURRENT_TIMESTAMP)
+      ON CONFLICT (job_id, ip_address)
+      DO UPDATE SET clicked_at = CURRENT_TIMESTAMP;
+    `;
+    await pool.query(query, [id, ipAddress]);
+
+    // Get updated click count
+    const countQuery = `
+      SELECT COUNT(DISTINCT ip_address) AS click_count
+      FROM job_clicks
+      WHERE job_id = $1;
+    `;
+    const result = await pool.query(countQuery, [id]);
+
+    res.status(200).json({
+      message: "Click recorded successfully",
+      click_count: result.rows[0].click_count
+    });
+  } catch (error) {
+    console.error(`Error recording job click: ${error.message}`);
+    res.status(500).json({ error: "Failed to record click" });
+  }
+});
 // Add this route to get session status
 app.get('/api/session/status', authenticateToken, async (req, res) => {
   try {
     const adminId = req.user.id;
-    
+
     // Get current session
     const activeSession = await pool.query(
       `SELECT * FROM admin_sessions 
@@ -552,8 +596,8 @@ app.get('/api/session/status', authenticateToken, async (req, res) => {
 
     // Calculate today's total time
     const todayStart = new Date();
-    todayStart.setHours(0,0,0,0);
-    
+    todayStart.setHours(0, 0, 0, 0);
+
     const todayResult = await pool.query(
       `SELECT SUM(EXTRACT(EPOCH FROM duration)) as total
        FROM admin_sessions 
@@ -704,7 +748,7 @@ app.put("/api/chat/rooms/:id", authenticateToken, authorizeAdmin, async (req, re
       "SELECT * FROM chat_rooms WHERE room_name = $1 AND id != $2",
       [room_name, id]
     );
-    
+
     if (existingRoom.rows.length > 0) {
       return res.status(400).json({ error: "Room name already exists" });
     }
@@ -715,13 +759,13 @@ app.put("/api/chat/rooms/:id", authenticateToken, authorizeAdmin, async (req, re
       WHERE id = $2 
       RETURNING *;
     `;
-    
+
     const result = await pool.query(updateQuery, [room_name, id]);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Room not found" });
     }
-    
+
     res.json(result.rows[0]);
   } catch (error) {
     console.error(`Error updating room: ${error.message}`);
@@ -736,14 +780,14 @@ app.delete("/api/chat/rooms/:id", authenticateToken, authorizeAdmin, async (req,
   try {
     // Delete related messages first
     await pool.query("DELETE FROM chat_messages WHERE room_id = $1", [id]);
-    
+
     const deleteQuery = "DELETE FROM chat_rooms WHERE id = $1 RETURNING *";
     const result = await pool.query(deleteQuery, [id]);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Room not found" });
     }
-    
+
     res.json({ message: "Room deleted successfully" });
   } catch (error) {
     console.error(`Error deleting room: ${error.message}`);
@@ -1281,17 +1325,17 @@ app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) 
   try {
     // Delete related approval requests first
     await pool.query("DELETE FROM job_approval_requests WHERE job_id = $1", [id]);
-    
+
     // Delete related viewers
     await pool.query("DELETE FROM job_viewers WHERE job_id = $1", [id]);
-    
+
     // Then delete the job
     const result = await pool.query("DELETE FROM job WHERE id = $1 RETURNING *", [id]);
-    
+
     if (result.rows.length === 0) {
       return res.status(404).json({ error: "Job not found" });
     }
-    
+
     res.json({ message: "Job deleted successfully" });
   } catch (error) {
     console.error(`Error deleting job: ${error.message}`);
@@ -1380,7 +1424,7 @@ app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => 
 
   try {
     const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
-   
+
     if (!existingJob.rows.length) {
       return res.status(404).json({ error: "Job not found" });
     }
@@ -1422,10 +1466,12 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
   const { companyname, url } = req.params;
 
   const getJobByCompanyNameQuery = `
-    SELECT * FROM job 
+    SELECT j.*, 
+      (SELECT COUNT(DISTINCT ip_address) FROM job_clicks WHERE job_id = j.id) AS click_count
+    FROM job j
     WHERE 
-      regexp_replace(LOWER(companyname), '[^a-z0-9]', '', 'g') = regexp_replace(LOWER($1), '[^a-z0-9]', '', 'g')
-      AND LOWER(url) = LOWER($2);
+      regexp_replace(LOWER(j.companyname), '[^a-z0-9]', '', 'g') = regexp_replace(LOWER($1), '[^a-z0-9]', '', 'g')
+      AND LOWER(j.url) = LOWER($2);
   `;
 
   try {
