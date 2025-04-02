@@ -443,7 +443,15 @@ const initializeDbAndServer = async () => {
   );
 `);
 
-
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS comments (
+    id SERIAL PRIMARY KEY,
+    job_id INT NOT NULL REFERENCES job(id) ON DELETE CASCADE,
+    user_name TEXT NOT NULL,
+    comment_text TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+`);
 
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
@@ -550,7 +558,48 @@ const initializeDbAndServer = async () => {
     process.exit(1);
   }
 };
+// Get comments for a job
+app.get("/api/comments/:jobId", async (req, res) => {
+  const { jobId } = req.params;
+  try {
+    const result = await pool.query(
+      "SELECT * FROM comments WHERE job_id = $1 ORDER BY created_at DESC",
+      [jobId]
+    );
+    res.json(result.rows);
+  } catch (error) {
+    console.error("Error fetching comments:", error);
+    res.status(500).json({ error: "Failed to fetch comments" });
+  }
+});
 
+// Post new comment
+app.post(
+  "/api/comments",
+  [
+    body("user_name").trim().notEmpty().withMessage("Name is required"),
+    body("comment_text").trim().notEmpty().withMessage("Comment cannot be empty"),
+    body("job_id").isInt().withMessage("Invalid job ID")
+  ],
+  async (req, res) => {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+
+    const { job_id, user_name, comment_text } = req.body;
+
+    try {
+      const result = await pool.query(
+        "INSERT INTO comments (job_id, user_name, comment_text) VALUES ($1, $2, $3) RETURNING *",
+        [job_id, user_name, comment_text]
+      );
+
+      res.status(201).json(result.rows[0]);
+    } catch (error) {
+      console.error("Error posting comment:", error);
+      res.status(500).json({ error: "Failed to post comment" });
+    }
+  }
+);
 // Route to record apply clicks
 app.post("/api/jobs/:id/click", async (req, res) => {
   const { id } = req.params;
