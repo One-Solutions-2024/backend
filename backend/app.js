@@ -1782,9 +1782,8 @@ app.post(
 );
 
 
-
 // Get Resumes Public Endpoint
-app.get('/api/public/resumes', authenticateToken, authorizeAdmin, async (req, res) => {
+app.get('/api/public/resumes',  async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT r.*, j.title as job_title 
