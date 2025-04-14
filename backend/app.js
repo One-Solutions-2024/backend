@@ -11,9 +11,10 @@ const bcrypt = require("bcrypt");
 const WebSocket = require("ws"); // Add WebSocket support
 require("dotenv").config(); // Load environment variables
 // Add these missing imports at the top
-const cheerio = require("cheerio");
-const axios = require("axios");
-const cron = require("node-cron");
+const multer = require('multer');
+const pdfParse = require('pdf-parse');
+const mammoth = require('mammoth');
+
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
 
@@ -450,6 +451,23 @@ const initializeDbAndServer = async () => {
     user_name TEXT NOT NULL,
     comment_text TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  );
+`);
+
+    // Create resumes table
+    await pool.query(`
+  CREATE TABLE IF NOT EXISTS resumes (
+    id SERIAL PRIMARY KEY,
+    job_id INT REFERENCES job(id),
+    name TEXT NOT NULL,
+    email TEXT NOT NULL,
+    phone TEXT,
+    resume_file BYTEA NOT NULL,
+    file_type TEXT NOT NULL,
+    skills TEXT[],
+    experience TEXT,
+    match_percentage FLOAT,
+    uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 `);
 
@@ -1694,6 +1712,130 @@ app.use((err, req, res, next) => {
   console.error(err.stack);
   res.status(500).json({ error: "Something went wrong!" });
 });
+
+
+
+// Configure storage for resumes
+const storage = multer.memoryStorage();
+const upload = multer({
+  storage: storage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'application/pdf' ||
+      file.mimetype === 'application/msword' ||
+      file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
+      cb(null, true);
+    } else {
+      cb(new Error('Invalid file type'), false);
+    }
+  }
+});
+
+
+
+// Resume Upload Endpoint
+app.post(
+  '/api/jobs/:id/upload-resume',
+  upload.single('resume'),
+  async (req, res) => {
+    try {
+      const jobId = req.params.id;
+      const { name, email, phone } = req.body;
+      const file = req.file;
+
+      // Parse resume content
+      let text = '';
+      if (file.mimetype === 'application/pdf') {
+        const pdfData = await pdfParse(file.buffer);
+        text = pdfData.text;
+      } else { // DOC/DOCX
+        const result = await mammoth.extractRawText({ buffer: file.buffer });
+        text = result.value;
+      }
+
+      // Analyze resume (simple version)
+      const skills = extractSkills(text);
+      const experience = extractExperience(text);
+
+      // Get job requirements
+      const job = await pool.query('SELECT * FROM job WHERE id = $1', [jobId]);
+      const matchPercentage = calculateMatch(text, job.rows[0].description);
+
+      // Store in database
+      await pool.query(
+        `INSERT INTO resumes (job_id, name, email, phone, resume_file, file_type, skills, experience, match_percentage)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+        [jobId, name, email, phone, file.buffer, file.mimetype, skills, experience, matchPercentage]
+      );
+
+      res.json({
+        success: true,
+        matchPercentage,
+        skills,
+        experience
+      });
+    } catch (error) {
+      console.error('Resume upload error:', error);
+      res.status(500).json({ error: 'Resume processing failed' });
+    }
+  }
+);
+
+// Get Resumes for Admin
+app.get('/api/resumes', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT r.*, j.title as job_title 
+      FROM resumes r
+      JOIN job j ON r.job_id = j.id
+      ORDER BY uploaded_at DESC
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching resumes:', error);
+    res.status(500).json({ error: 'Failed to fetch resumes' });
+  }
+});
+
+// Download Resume Endpoint
+app.get('/api/resumes/:id/download', async (req, res) => {
+  try {
+    const result = await pool.query('SELECT * FROM resumes WHERE id = $1', [req.params.id]);
+    if (!result.rows.length) return res.status(404).send('Resume not found');
+
+    const resume = result.rows[0];
+    res.set({
+      'Content-Type': resume.file_type,
+      'Content-Disposition': `attachment; filename="${resume.name}_resume.${resume.file_type.split('/')[1]}"`
+    });
+    res.send(resume.resume_file);
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).send('Download failed');
+  }
+});
+
+// Helper functions
+function extractSkills(text) {
+  const skills = ['JavaScript', 'React', 'Node.js', 'Python', 'Java']; // Add more
+  return skills.filter(skill => text.toLowerCase().includes(skill.toLowerCase()));
+}
+
+function extractExperience(text) {
+  const expMatch = text.match(/(\d+)\+?\s*years?/i);
+  return expMatch ? expMatch[0] : 'Not specified';
+}
+
+function calculateMatch(resumeText, jobDescription) {
+  const jobKeywords = jobDescription.toLowerCase().match(/\b\w+\b/g) || [];
+  const resumeWords = resumeText.toLowerCase().match(/\b\w+\b/g) || [];
+
+  const matches = jobKeywords.filter(word =>
+    resumeWords.includes(word) && word.length > 3
+  );
+
+  return (matches.length / jobKeywords.length) * 100;
+}
 
 // Connect to the database and start the server
 initializeDbAndServer();
