@@ -1734,52 +1734,57 @@ const upload = multer({
 
 
 // Resume Upload Endpoint
-app.post(
-  '/api/jobs/:id/upload-resume',
-  upload.single('resume'),
-  async (req, res) => {
-    try {
-      const jobId = req.params.id;
-      const { name, email, phone } = req.body;
-      const file = req.file;
+// Update your resume upload endpoint to use the enhanced analysis
+app.post("/api/jobs/:id/upload-resume", upload.single("resume"), async (req, res) => {
+  try {
+    const jobId = req.params.id
+    const { name, email, phone } = req.body
+    const file = req.file
 
-      // Parse resume content
-      let text = '';
-      if (file.mimetype === 'application/pdf') {
-        const pdfData = await pdfParse(file.buffer);
-        text = pdfData.text;
-      } else { // DOC/DOCX
-        const result = await mammoth.extractRawText({ buffer: file.buffer });
-        text = result.value;
-      }
-
-      // Analyze resume (simple version)
-      const skills = extractSkills(text);
-      const experience = extractExperience(text);
-
-      // Get job requirements
-      const job = await pool.query('SELECT * FROM job WHERE id = $1', [jobId]);
-      const matchPercentage = calculateMatch(text, job.rows[0].description);
-
-      // Store in database
-      await pool.query(
-        `INSERT INTO resumes (job_id, name, email, phone, resume_file, file_type, skills, experience, match_percentage)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        [jobId, name, email, phone, file.buffer, file.mimetype, skills, experience, matchPercentage]
-      );
-
-      res.json({
-        success: true,
-        matchPercentage,
-        skills,
-        experience
-      });
-    } catch (error) {
-      console.error('Resume upload error:', error);
-      res.status(500).json({ error: 'Resume processing failed' });
+    // Parse resume content
+    let text = ""
+    if (file.mimetype === "application/pdf") {
+      const pdfData = await pdfParse(file.buffer)
+      text = pdfData.text
+    } else {
+      // DOC/DOCX
+      const result = await mammoth.extractRawText({ buffer: file.buffer })
+      text = result.value
     }
+
+    // Get job requirements
+    const job = await pool.query("SELECT * FROM job WHERE id = $1", [jobId])
+
+    // Use enhanced analysis
+    const analysisResult = analyzeResume(text, job.rows[0].description)
+
+    // Add filename to result
+    analysisResult.resumeFileName = file.originalname
+
+    // Store in database
+    await pool.query(
+      `INSERT INTO resumes (job_id, name, email, phone, resume_file, file_type, skills, experience, match_percentage)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        jobId,
+        name,
+        email,
+        phone,
+        file.buffer,
+        file.mimetype,
+        analysisResult.skills,
+        analysisResult.experience,
+        analysisResult.matchPercentage,
+      ],
+    )
+
+    res.json(analysisResult)
+  } catch (error) {
+    console.error("Resume upload error:", error)
+    res.status(500).json({ error: "Resume processing failed" })
   }
-);
+})
+
 
 
 // Get Resumes Public Endpoint
@@ -1816,27 +1821,288 @@ app.get('/api/resumes/:id/download', async (req, res) => {
   }
 });
 
-// Helper functions
+// Enhanced resume analysis function
+function analyzeResume(resumeText, jobDescription) {
+  // Extract job requirements
+  const requirements = extractRequirements(jobDescription)
+
+  // Extract skills from resume
+  const skills = extractSkills(resumeText)
+
+  // Compare requirements and skills
+  const { pros, cons, summary } = compareRequirementsAndSkills(requirements, skills, resumeText)
+
+  // Calculate match percentage based on matched requirements
+  const matchedRequirements = requirements.filter((req) =>
+    skills.some((skill) => req.toLowerCase().includes(skill.toLowerCase())),
+  )
+
+  const matchPercentage = requirements.length > 0 ? (matchedRequirements.length / requirements.length) * 100 : 50 // Default to 50% if no requirements found
+
+  return {
+    matchPercentage,
+    skills,
+    experience: extractExperience(resumeText),
+    pros,
+    cons,
+    summary,
+  }
+}
+
+// Extract requirements from job description
+function extractRequirements(description) {
+  if (!description) return []
+
+  // Split by lines and bullet points
+  const lines = description
+    .split(/[\n•\-*]/)
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0)
+
+  // Filter for likely requirement lines (containing keywords like "experience", "knowledge", "skill", etc.)
+  const requirementKeywords = ["experience", "knowledge", "skill", "proficiency", "ability", "familiar", "understand"]
+
+  const requirements = lines.filter(
+    (line) =>
+      requirementKeywords.some((keyword) => line.toLowerCase().includes(keyword)) ||
+      line.toLowerCase().includes("years") ||
+      /^[A-Z]/.test(line), // Lines starting with capital letters (likely bullet points)
+  )
+
+  return requirements.length > 0 ? requirements : lines.slice(0, 5) // Fallback to first 5 lines if no requirements found
+}
+
+// Enhanced skill extraction
 function extractSkills(text) {
-  const skills = ['JavaScript', 'React', 'Node.js', 'Python', 'Java']; // Add more
-  return skills.filter(skill => text.toLowerCase().includes(skill.toLowerCase()));
+  // Common technical skills
+  const technicalSkills = [
+    "JavaScript",
+    "React",
+    "Angular",
+    "Vue",
+    "Node.js",
+    "Express",
+    "Python",
+    "Java",
+    "C#",
+    "C++",
+    "PHP",
+    "Ruby",
+    "Swift",
+    "Kotlin",
+    "Go",
+    "Rust",
+    "SQL",
+    "NoSQL",
+    "MongoDB",
+    "PostgreSQL",
+    "MySQL",
+    "Oracle",
+    "Firebase",
+    "AWS",
+    "Azure",
+    "GCP",
+    "Docker",
+    "Kubernetes",
+    "Git",
+    "HTML",
+    "CSS",
+    "SASS",
+    "LESS",
+    "Bootstrap",
+    "Tailwind",
+    "TypeScript",
+    "Redux",
+    "GraphQL",
+    "REST API",
+    "SOAP",
+    "CI/CD",
+    "Jenkins",
+    "Travis",
+    "Agile",
+    "Scrum",
+    "Kanban",
+    "Jira",
+    "TDD",
+    "BDD",
+    "Unit Testing",
+    "Integration Testing",
+    "E2E Testing",
+    "Jest",
+    "Mocha",
+    "Chai",
+    "Selenium",
+    "Cypress",
+    "Webpack",
+    "Babel",
+    "ESLint",
+    "Prettier",
+    "Linux",
+    "Windows",
+    "MacOS",
+    "Mobile Development",
+    "iOS",
+    "Android",
+    "React Native",
+    "Flutter",
+    "Xamarin",
+    "UI/UX",
+    "Figma",
+    "Sketch",
+    "Adobe XD",
+    "Photoshop",
+    "Illustrator",
+    "InDesign",
+    "After Effects",
+    "Data Analysis",
+    "Machine Learning",
+    "AI",
+    "Deep Learning",
+    "NLP",
+    "Computer Vision",
+    "TensorFlow",
+    "PyTorch",
+    "Keras",
+    "scikit-learn",
+    "pandas",
+    "numpy",
+    "R",
+    "Tableau",
+    "Power BI",
+    "Excel",
+    "VBA",
+    "SharePoint",
+    "Salesforce",
+    "SAP",
+    "ERP",
+    "CRM",
+  ]
+
+  // Soft skills
+  const softSkills = [
+    "Communication",
+    "Teamwork",
+    "Problem Solving",
+    "Critical Thinking",
+    "Creativity",
+    "Leadership",
+    "Time Management",
+    "Adaptability",
+    "Flexibility",
+    "Work Ethic",
+    "Attention to Detail",
+    "Organization",
+    "Interpersonal Skills",
+    "Conflict Resolution",
+    "Decision Making",
+    "Stress Management",
+    "Emotional Intelligence",
+    "Collaboration",
+    "Negotiation",
+    "Persuasion",
+    "Presentation",
+    "Public Speaking",
+    "Customer Service",
+    "Project Management",
+    "Multitasking",
+    "Self-Motivation",
+    "Initiative",
+    "Persistence",
+  ]
+
+  const allSkills = [...technicalSkills, ...softSkills]
+
+  // Find skills in resume text
+  const foundSkills = allSkills.filter((skill) => new RegExp(`\\b${skill}\\b`, "i").test(text))
+
+  // Extract years of experience for skills
+  const skillsWithExperience = foundSkills.map((skill) => {
+    const expMatch = text.match(
+      new RegExp(`(\\d+)\\s*(?:years?|yrs?)\\s*(?:of)?\\s*(?:experience)?\\s*(?:with|in)\\s*${skill}`, "i"),
+    )
+
+    if (expMatch) {
+      return `${skill} (${expMatch[1]} years)`
+    }
+    return skill
+  })
+
+  return skillsWithExperience.length > 0 ? skillsWithExperience : foundSkills
 }
 
+// Extract experience information
 function extractExperience(text) {
-  const expMatch = text.match(/(\d+)\+?\s*years?/i);
-  return expMatch ? expMatch[0] : 'Not specified';
+  // Look for overall experience
+  const expMatch = text.match(/(\d+)\+?\s*years?(?:\s*of)?\s*experience/i)
+  if (expMatch) {
+    return expMatch[0]
+  }
+
+  // Look for job titles with dates
+  const jobTitleMatch = text.match(
+    /(?:senior|junior|lead|principal|staff)?\s*(?:software|web|frontend|backend|fullstack|mobile)?\s*(?:engineer|developer|architect|designer)/i,
+  )
+  if (jobTitleMatch) {
+    return `${jobTitleMatch[0]} experience`
+  }
+
+  return "Experience level not specified"
 }
 
-function calculateMatch(resumeText, jobDescription) {
-  const jobKeywords = jobDescription.toLowerCase().match(/\b\w+\b/g) || [];
-  const resumeWords = resumeText.toLowerCase().match(/\b\w+\b/g) || [];
+// Compare requirements and skills to generate pros and cons
+function compareRequirementsAndSkills(requirements, skills, resumeText) {
+  const pros = []
+  const cons = []
 
-  const matches = jobKeywords.filter(word =>
-    resumeWords.includes(word) && word.length > 3
-  );
+  // Convert skills to lowercase for case-insensitive matching
+  const lowerCaseSkills = skills.map((skill) => skill.toLowerCase())
+  const lowerCaseResumeText = resumeText.toLowerCase()
 
-  return (matches.length / jobKeywords.length) * 100;
+  // Check each requirement against skills and resume text
+  requirements.forEach((req) => {
+    const lowerReq = req.toLowerCase()
+
+    // Check if any skill matches this requirement or if requirement is mentioned in resume
+    const hasMatch =
+      lowerCaseSkills.some(
+        (skill) =>
+          lowerReq.includes(skill.replace(/\s*$$\d+\s*years$$$/, "")) ||
+          skill.replace(/\s*$$\d+\s*years$$$/, "").includes(lowerReq.substring(0, Math.min(lowerReq.length, 10))),
+      ) || lowerCaseResumeText.includes(lowerReq)
+
+    if (hasMatch) {
+      pros.push(`Candidate has experience with ${req}`)
+    } else {
+      cons.push(`Candidate lacks experience with ${req}`)
+    }
+  })
+
+  // Generate additional pros based on skills not mentioned in requirements
+  skills.forEach((skill) => {
+    const cleanSkill = skill.replace(/\s*$$\d+\s*years$$$/, "")
+    const lowerSkill = cleanSkill.toLowerCase()
+    const isExtraSkill = !requirements.some((req) => req.toLowerCase().includes(lowerSkill))
+
+    if (isExtraSkill) {
+      pros.push(`Candidate has additional skill: ${skill}`)
+    }
+  })
+
+  // Generate summary
+  let summary = ""
+  if (pros.length > cons.length) {
+    summary = `The candidate matches ${pros.length} out of ${pros.length + cons.length} job requirements. The candidate has the relevant skills for this position but may need training in some specific areas.`
+  } else if (pros.length < cons.length) {
+    summary = `The candidate matches ${pros.length} out of ${pros.length + cons.length} job requirements. While the candidate has some relevant skills, there are significant gaps in meeting the job requirements.`
+  } else {
+    summary = `The candidate matches ${pros.length} out of ${pros.length + cons.length} job requirements. The candidate has a balanced profile with both strengths and areas for improvement relative to this position.`
+  }
+
+  return {
+    pros: pros.slice(0, 5), // Limit to top 5 pros
+    cons: cons.slice(0, 5), // Limit to top 5 cons
+    summary,
+  }
 }
-
 // Connect to the database and start the server
 initializeDbAndServer();
