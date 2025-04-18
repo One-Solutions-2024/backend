@@ -1733,59 +1733,6 @@ const upload = multer({
 
 
 
-// Resume Upload Endpoint
-// Update your resume upload endpoint to use the enhanced analysis
-app.post("/api/jobs/:id/upload-resume", upload.single("resume"), async (req, res) => {
-  try {
-    const jobId = req.params.id
-    const { name, email, phone } = req.body
-    const file = req.file
-
-    // Parse resume content
-    let text = ""
-    if (file.mimetype === "application/pdf") {
-      const pdfData = await pdfParse(file.buffer)
-      text = pdfData.text
-    } else {
-      // DOC/DOCX
-      const result = await mammoth.extractRawText({ buffer: file.buffer })
-      text = result.value
-    }
-
-    // Get job requirements
-    const job = await pool.query("SELECT * FROM job WHERE id = $1", [jobId])
-
-    // Use enhanced analysis
-    const analysisResult = analyzeResume(text, job.rows[0].description)
-
-    // Add filename to result
-    analysisResult.resumeFileName = file.originalname
-
-    // Store in database
-    await pool.query(
-      `INSERT INTO resumes (job_id, name, email, phone, resume_file, file_type, skills, experience, match_percentage)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        jobId,
-        name,
-        email,
-        phone,
-        file.buffer,
-        file.mimetype,
-        analysisResult.skills,
-        analysisResult.experience,
-        analysisResult.matchPercentage,
-      ],
-    )
-
-    res.json(analysisResult)
-  } catch (error) {
-    console.error("Resume upload error:", error)
-    res.status(500).json({ error: "Resume processing failed" })
-  }
-})
-
-
 
 // Get Resumes Public Endpoint
 app.get('/api/public/resumes',  async (req, res) => {
@@ -2013,12 +1960,18 @@ function extractSkills(text) {
   const allSkills = [...technicalSkills, ...softSkills]
 
   // Find skills in resume text
-  const foundSkills = allSkills.filter((skill) => new RegExp(`\\b${skill}\\b`, "i").test(text))
+  const foundSkills = allSkills.filter((skill) => {
+    // Escape special regex characters in skill name
+    const escapedSkill = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    return new RegExp(`\\b${escapedSkill}\\b`, "i").test(text)
+  })
 
   // Extract years of experience for skills
   const skillsWithExperience = foundSkills.map((skill) => {
+    // Escape special regex characters in skill name
+    const escapedSkill = skill.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
     const expMatch = text.match(
-      new RegExp(`(\\d+)\\s*(?:years?|yrs?)\\s*(?:of)?\\s*(?:experience)?\\s*(?:with|in)\\s*${skill}`, "i"),
+      new RegExp(`(\\d+)\\s*(?:years?|yrs?)\\s*(?:of)?\\s*(?:experience)?\\s*(?:with|in)\\s*${escapedSkill}`, "i"),
     )
 
     if (expMatch) {
@@ -2104,5 +2057,56 @@ function compareRequirementsAndSkills(requirements, skills, resumeText) {
     summary,
   }
 }
+
+// Update your resume upload endpoint to use the enhanced analysis
+app.post("/api/jobs/:id/upload-resume", upload.single("resume"), async (req, res) => {
+  try {
+    const jobId = req.params.id
+    const { name, email, phone } = req.body
+    const file = req.file
+
+    // Parse resume content
+    let text = ""
+    if (file.mimetype === "application/pdf") {
+      const pdfData = await pdfParse(file.buffer)
+      text = pdfData.text
+    } else {
+      // DOC/DOCX
+      const result = await mammoth.extractRawText({ buffer: file.buffer })
+      text = result.value
+    }
+
+    // Get job requirements
+    const job = await pool.query("SELECT * FROM job WHERE id = $1", [jobId])
+
+    // Use enhanced analysis
+    const analysisResult = analyzeResume(text, job.rows[0].description)
+
+    // Add filename to result
+    analysisResult.resumeFileName = file.originalname
+
+    // Store in database
+    await pool.query(
+      `INSERT INTO resumes (job_id, name, email, phone, resume_file, file_type, skills, experience, match_percentage)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+      [
+        jobId,
+        name,
+        email,
+        phone,
+        file.buffer,
+        file.mimetype,
+        analysisResult.skills,
+        analysisResult.experience,
+        analysisResult.matchPercentage,
+      ],
+    )
+
+    res.json(analysisResult)
+  } catch (error) {
+    console.error("Resume upload error:", error)
+    res.status(500).json({ error: "Resume processing failed" })
+  }
+})
 // Connect to the database and start the server
 initializeDbAndServer();
