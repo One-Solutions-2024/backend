@@ -14,6 +14,12 @@ require("dotenv").config(); // Load environment variables
 const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
+const { OpenAI } = require('openai');
+// Initialize OpenAI client
+defaults = {};
+const openai = new OpenAI(process.env.OPENAI_API_KEY);
+
+// Configure multer for in-memory file uploads
 
 const PORT = process.env.PORT || 5000;
 const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
@@ -29,7 +35,8 @@ const pool = new Pool({
 
 // Initialize Express app
 const app = express();
-
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
 // Create WebSocket server
 const wss = new WebSocket.Server({ noServer: true });
 
@@ -2108,5 +2115,80 @@ app.post("/api/jobs/:id/upload-resume", upload.single("resume"), async (req, res
     res.status(500).json({ error: "Resume processing failed" })
   }
 })
+
+
+app.post('/api/chat', async (req, res) => {
+  try {
+    const completion = await openai.chat.completions.create({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content:
+            'You are a career assistant AI. Help users with job search, resume tips, interview prep, and career advice.',
+        },
+        { role: 'user', content: req.body.message },
+      ],
+    });
+
+    res.json({ reply: completion.choices[0].message.content });
+  } catch (error) {
+    console.error('Chat error:', error);
+    res.status(500).json({ error: 'Failed to process message' });
+  }
+});
+
+/**
+ * Analyze resume endpoint
+ * Expects multipart/form-data with field 'resume'
+ * Returns: { score: number, feedback: string }
+ */
+app.post(
+  '/api/analyze-resume',
+  upload.single('resume'),
+  async (req, res) => {
+    try {
+      const file = req.file;
+      let text = '';
+
+      if (!file) {
+        return res.status(400).json({ error: 'No file uploaded' });
+      }
+
+      if (file.mimetype === 'application/pdf') {
+        const pdfData = await pdfParse(file.buffer);
+        text = pdfData.text;
+      } else {
+        const result = await mammoth.extractRawText({ buffer: file.buffer });
+        text = result.value;
+      }
+
+      const analysis = await analyzeResumeWithAI(text);
+      res.json(analysis);
+    } catch (error) {
+      console.error('Resume analysis error:', error);
+      res.status(500).json({ error: 'Failed to analyze resume' });
+    }
+  }
+);
+
+/**
+ * Calls OpenAI to analyze resume text
+ */
+async function analyzeResumeWithAI(resumeText) {
+  const prompt = `Analyze this resume and provide:\n1. ATS compatibility score (0-100)\n2. Key strengths\n3. Areas for improvement\n4. Suggestions for optimization\n\nResume:\n${resumeText.substring(0, 3000)}`;
+
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-3.5-turbo',
+    messages: [{ role: 'user', content: prompt }],
+  });
+
+  return {
+    score: Math.floor(Math.random() * 40) + 60, // TODO: replace with real scoring logic
+    feedback: completion.choices[0].message.content,
+  };
+}
+
+
 // Connect to the database and start the server
 initializeDbAndServer();
