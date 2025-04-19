@@ -2117,77 +2117,149 @@ app.post("/api/jobs/:id/upload-resume", upload.single("resume"), async (req, res
 })
 
 
-app.post('/api/chat', async (req, res) => {
+// Enhanced Resume Analysis Function for Multiple Jobs
+const analyzeResumeForAllJobs = (resumeText, jobs) => {
+  // Extract skills and experience from resume once
+  const skills = extractSkills(resumeText);
+  const experience = extractExperience(resumeText);
+  
+  // Analyze against each job
+  const jobAnalyses = jobs.map(job => {
+    const requirements = extractRequirements(job.description);
+    const matchedRequirements = requirements.filter(req =>
+      skills.some(skill => req.toLowerCase().includes(skill.toLowerCase()))
+    );
+    
+    const matchPercentage = requirements.length > 0 
+      ? (matchedRequirements.length / requirements.length) * 100
+      : 50;
+
+    return {
+      jobId: job.id,
+      title: job.title,
+      company: job.companyname,
+      matchPercentage,
+      requirements: {
+        total: requirements.length,
+        matched: matchedRequirements.length
+      }
+    };
+  });
+
+  // Calculate overall statistics
+  const totalMatch = jobAnalyses.reduce((sum, analysis) => sum + analysis.matchPercentage, 0);
+  const averageMatch = totalMatch / jobAnalyses.length;
+  
+  // Get top 3 matches
+  const topMatches = [...jobAnalyses]
+    .sort((a, b) => b.matchPercentage - a.matchPercentage)
+    .slice(0, 3);
+
+  return {
+    averageMatch,
+    topMatches,
+    skills,
+    experience,
+    totalJobsAnalyzed: jobs.length
+  };
+};
+
+// Enhanced Resume Analysis Endpoint
+app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
   try {
+    const file = req.file;
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+
+    // Parse resume text
+    let text = '';
+    if (file.mimetype === 'application/pdf') {
+      const pdfData = await pdfParse(file.buffer);
+      text = pdfData.text;
+    } else {
+      const result = await mammoth.extractRawText({ buffer: file.buffer });
+      text = result.value;
+    }
+
+    // Get all jobs from database
+    const { rows: jobs } = await pool.query('SELECT id, companyname, title, description FROM job');
+
+    // Perform analysis
+    const analysisResult = analyzeResumeForAllJobs(text, jobs);
+
+    res.json({
+      success: true,
+      overallScore: analysisResult.averageMatch,
+      skills: analysisResult.skills,
+      experience: analysisResult.experience,
+      topMatches: analysisResult.topMatches,
+      totalJobsAnalyzed: analysisResult.totalJobsAnalyzed,
+      summary: `Analyzed against ${analysisResult.totalJobsAnalyzed} jobs with average ${analysisResult.averageMatch.toFixed(1)}% match`
+    });
+  } catch (error) {
+    console.error('Resume analysis error:', error);
+    res.status(500).json({ 
+      success: false,
+      error: 'Failed to analyze resume',
+      details: error.message
+    });
+  }
+});
+
+// Enhanced AI Career Chatbot Endpoint
+app.post('/api/chatbot', async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message || typeof message !== 'string' || message.trim().length === 0) {
+      return res.status(400).json({ error: 'Invalid message content' });
+    }
+
     const completion = await openai.chat.completions.create({
       model: 'gpt-3.5-turbo',
       messages: [
         {
           role: 'system',
-          content:
-            'You are a career assistant AI. Help users with job search, resume tips, interview prep, and career advice.',
+          content: `You are CareerGPT, an AI career assistant specializing in:
+          - Job search strategies
+          - Resume optimization tips
+          - Interview preparation
+          - Career development
+          - Salary negotiation advice
+          - Tech industry insights
+          Provide concise, actionable advice. Format responses with clear headings,
+          bullet points when listing items, and emojis for visual organization.`
         },
-        { role: 'user', content: req.body.message },
+        { 
+          role: 'user', 
+          content: message.trim() 
+        }
       ],
+      max_tokens: 500,
+      temperature: 0.7
     });
 
-    res.json({ reply: completion.choices[0].message.content });
+    const response = completion.choices[0].message.content;
+    
+    // Store conversation in database (optional)
+    await pool.query(
+      'INSERT INTO chat_history (query, response) VALUES ($1, $2)',
+      [message, response]
+    );
+
+    res.json({
+      success: true,
+      reply: response
+    });
   } catch (error) {
     console.error('Chat error:', error);
-    res.status(500).json({ error: 'Failed to process message' });
+    res.status(500).json({
+      success: false,
+      error: 'Failed to process message',
+      system: 'Our career assistant is currently unavailable. Please try again later.'
+    });
   }
 });
 
-/**
- * Analyze resume endpoint
- * Expects multipart/form-data with field 'resume'
- * Returns: { score: number, feedback: string }
- */
-app.post(
-  '/api/analyze-resume',
-  upload.single('resume'),
-  async (req, res) => {
-    try {
-      const file = req.file;
-      let text = '';
 
-      if (!file) {
-        return res.status(400).json({ error: 'No file uploaded' });
-      }
-
-      if (file.mimetype === 'application/pdf') {
-        const pdfData = await pdfParse(file.buffer);
-        text = pdfData.text;
-      } else {
-        const result = await mammoth.extractRawText({ buffer: file.buffer });
-        text = result.value;
-      }
-
-      const analysis = await analyzeResumeWithAI(text);
-      res.json(analysis);
-    } catch (error) {
-      console.error('Resume analysis error:', error);
-      res.status(500).json({ error: 'Failed to analyze resume' });
-    }
-  }
-);
-
-/**
- * Calls OpenAI to analyze resume text
- */
-async function analyzeResumeWithAI(resumeText) {
-  const prompt = `Analyze this resume and provide:\n1. ATS compatibility score (0-100)\n2. Key strengths\n3. Areas for improvement\n4. Suggestions for optimization\n\nResume:\n${resumeText.substring(0, 3000)}`;
-
-  const completion = await openai.chat.completions.create({
-    model: 'gpt-3.5-turbo',
-    messages: [{ role: 'user', content: prompt }],
-  });
-
-  return {
-    score: Math.floor(Math.random() * 40) + 60, // TODO: replace with real scoring logic
-    feedback: completion.choices[0].message.content,
-  };
-}
 
 
 // Connect to the database and start the server
