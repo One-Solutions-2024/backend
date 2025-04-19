@@ -2188,12 +2188,12 @@ app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
 
     res.json({
       success: true,
-      overallScore: analysisResult.averageMatch,
+      score: analysisResult.averageMatch, // Changed from overallScore
+      feedback: analysisResult.summary,   // Added feedback field
       skills: analysisResult.skills,
       experience: analysisResult.experience,
       topMatches: analysisResult.topMatches,
-      totalJobsAnalyzed: analysisResult.totalJobsAnalyzed,
-      summary: `Analyzed against ${analysisResult.totalJobsAnalyzed} jobs with average ${analysisResult.averageMatch.toFixed(1)}% match`
+      totalJobsAnalyzed: analysisResult.totalJobsAnalyzed
     });
   } catch (error) {
     console.error('Resume analysis error:', error);
@@ -2204,7 +2204,6 @@ app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
     });
   }
 });
-
 // Enhanced AI Career Chatbot Endpoint
 app.post('/api/chatbot', async (req, res) => {
   try {
