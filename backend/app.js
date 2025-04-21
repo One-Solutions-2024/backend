@@ -2165,12 +2165,16 @@ const analyzeResumeForAllJobs = (resumeText, jobs) => {
 };
 
 // Enhanced Resume Analysis Endpoint
+// Store analyzed resume in database (add to existing /api/analyze-resume route)
 app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
   try {
     const file = req.file;
-    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+    const { name, email, phone } = req.body; // Get user details from request
 
-    // Parse resume text
+    if (!file) return res.status(400).json({ error: 'No file uploaded' });
+    if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
+
+    // Existing analysis logic
     let text = '';
     if (file.mimetype === 'application/pdf') {
       const pdfData = await pdfParse(file.buffer);
@@ -2180,21 +2184,35 @@ app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
       text = result.value;
     }
 
-    // Get all jobs from database
     const { rows: jobs } = await pool.query('SELECT id, companyname, title, description FROM job');
-
-    // Perform analysis
     const analysisResult = analyzeResumeForAllJobs(text, jobs);
+
+    // Store in database with NULL job_id
+    await pool.query(
+      `INSERT INTO resumes (name, email, phone, resume_file, file_type, skills, experience, match_percentage)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+      [
+        name,
+        email,
+        phone || null,
+        file.buffer,
+        file.mimetype,
+        analysisResult.skills,
+        analysisResult.experience,
+        analysisResult.averageMatch
+      ]
+    );
 
     res.json({
       success: true,
-      score: analysisResult.averageMatch, // Changed from overallScore
-      feedback: analysisResult.summary,   // Added feedback field
+      score: analysisResult.averageMatch,
+      feedback: analysisResult.summary,
       skills: analysisResult.skills,
       experience: analysisResult.experience,
       topMatches: analysisResult.topMatches,
       totalJobsAnalyzed: analysisResult.totalJobsAnalyzed
     });
+
   } catch (error) {
     console.error('Resume analysis error:', error);
     res.status(500).json({ 
@@ -2202,6 +2220,45 @@ app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
       error: 'Failed to analyze resume',
       details: error.message
     });
+  }
+});
+
+// Get all analyzed resumes (general analysis)
+app.get('/api/analyzed-resumes', async (req, res) => {
+  try {
+    const result = await pool.query(`
+      SELECT id, name, email, phone, skills, experience, 
+             match_percentage, uploaded_at
+      FROM resumes
+      WHERE job_id IS NULL
+      ORDER BY uploaded_at DESC
+    `);
+    res.json(result.rows);
+  } catch (error) {
+    console.error('Error fetching analyzed resumes:', error);
+    res.status(500).json({ error: 'Failed to fetch resumes' });
+  }
+});
+
+// Download analyzed resume
+app.get('/api/analyzed-resumes/:id/download', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM resumes WHERE id = $1 AND job_id IS NULL',
+      [req.params.id]
+    );
+    
+    if (!result.rows.length) return res.status(404).send('Resume not found');
+
+    const resume = result.rows[0];
+    res.set({
+      'Content-Type': resume.file_type,
+      'Content-Disposition': `attachment; filename="${resume.name}_resume.${resume.file_type.split('/')[1]}"`
+    });
+    res.send(resume.resume_file);
+  } catch (error) {
+    console.error('Download error:', error);
+    res.status(500).send('Download failed');
   }
 });
 // Enhanced AI Career Chatbot Endpoint
@@ -2257,9 +2314,6 @@ app.post('/api/chatbot', async (req, res) => {
     });
   }
 });
-
-
-
 
 // Connect to the database and start the server
 initializeDbAndServer();
