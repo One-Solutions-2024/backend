@@ -1742,13 +1742,13 @@ const upload = multer({
 
 
 // Get Resumes Public Endpoint
-app.get('/api/public/resumes',  async (req, res) => {
+app.get('/api/public/resumes', async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT r.*, 
              j.title as job_title,
              j.companyname as job_companyname,
-             j.url as job_url,
+             j.url as job_url
       FROM resumes r
       JOIN job j ON r.job_id = j.id
       ORDER BY uploaded_at DESC
@@ -1759,7 +1759,6 @@ app.get('/api/public/resumes',  async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch resumes' });
   }
 });
-
 // Download Resume Endpoint
 app.get('/api/resumes/:id/download', async (req, res) => {
   try {
