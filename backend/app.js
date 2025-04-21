@@ -1747,8 +1747,8 @@ app.get('/api/public/resumes',  async (req, res) => {
     const result = await pool.query(`
       SELECT r.*, 
              j.title as job_title,
-             j.companyname,
-             j.url
+             j.companyname as job_companyname,
+             j.url as job_url,
       FROM resumes r
       JOIN job j ON r.job_id = j.id
       ORDER BY uploaded_at DESC
