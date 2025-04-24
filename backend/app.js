@@ -15,6 +15,8 @@ const multer = require('multer');
 const pdfParse = require('pdf-parse');
 const mammoth = require('mammoth');
 const { OpenAI } = require('openai');
+const passport = require("passport")
+const GoogleStrategy = require("passport-google-oauth20").Strategy
 // Initialize OpenAI client
 defaults = {};
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
@@ -103,6 +105,63 @@ const authorizeAdmin = (req, res, next) => {
   }
   next();
 };
+
+// Configure passport with Google strategy
+passport.use(
+  new GoogleStrategy(
+    {
+      clientID: process.env.GOOGLE_CLIENT_ID,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+      callbackURL: "https://backend-lt9m.onrender.com/api/auth/google/callback",
+    },
+    async (accessToken, refreshToken, profile, done) => {
+      try {
+        // Check if user exists in database
+        const existingUser = await pool.query("SELECT * FROM users WHERE google_id = $1", [profile.id])
+
+        if (existingUser.rows.length) {
+          // User exists, update last login
+          await pool.query("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE google_id = $1", [profile.id])
+          return done(null, existingUser.rows[0])
+        }
+
+        // Create new user
+        const newUser = await pool.query(
+          `INSERT INTO users (
+          google_id, 
+          display_name, 
+          email, 
+          photo_url, 
+          created_at, 
+          last_login
+        ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING *`,
+          [profile.id, profile.displayName, profile.emails[0].value, profile.photos[0].value],
+        )
+
+        return done(null, newUser.rows[0])
+      } catch (error) {
+        return done(error, null)
+      }
+    },
+  ),
+)
+
+// Serialize and deserialize user
+passport.serializeUser((user, done) => {
+  done(null, user.id)
+})
+
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await pool.query("SELECT * FROM users WHERE id = $1", [id])
+    done(null, user.rows[0])
+  } catch (error) {
+    done(error, null)
+  }
+})
+
+// Initialize passport middleware
+app.use(passport.initialize())
 
 
 // Modified admin registration route
@@ -477,6 +536,23 @@ const initializeDbAndServer = async () => {
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
 `);
+
+try {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS users (
+      id SERIAL PRIMARY KEY,
+      google_id TEXT UNIQUE NOT NULL,
+      display_name TEXT NOT NULL,
+      email TEXT UNIQUE NOT NULL,
+      photo_url TEXT,
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+      last_login TIMESTAMP
+    );
+  `)
+  console.log("Users table initialized")
+} catch (error) {
+  console.error("Error initializing users table:", error.message)
+}
 
     const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
     const popupCount = popUpCountResult.rows[0].count;
@@ -2316,6 +2392,79 @@ app.post('/api/chatbot', async (req, res) => {
     });
   }
 });
+
+
+// Google OAuth routes
+app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }))
+
+
+app.get("/api/auth/google/callback", passport.authenticate("google", { session: false }), (req, res) => {
+  // Create JWT token
+  const token = jwt.sign(
+    {
+      id: req.user.id,
+      googleId: req.user.google_id,
+      displayName: req.user.display_name,
+      email: req.user.email,
+      photoURL: req.user.photo_url,
+    },
+    JWT_SECRET,
+    { expiresIn: "7d" },
+  )
+
+  // Send token and user data to client via postMessage
+  res.send(`
+      <html>
+        <body>
+          <script>
+            window.opener.postMessage(
+              { 
+                token: "${token}", 
+                user: {
+                  id: "${req.user.id}",
+                  googleId: "${req.user.google_id}",
+                  displayName: "${req.user.display_name}",
+                  email: "${req.user.email}",
+                  photoURL: "${req.user.photo_url}"
+                }
+              }, 
+              "${process.env.FRONTEND_URL || "*"}"
+            );
+            window.close();
+          </script>
+        </body>
+      </html>
+    `)
+})
+
+// Get current user
+app.get("/api/auth/me", authenticateToken, async (req, res) => {
+  try {
+    const user = await pool.query("SELECT id, google_id, display_name, email, photo_url FROM users WHERE id = $1", [
+      req.user.id,
+    ])
+
+    if (!user.rows.length) {
+      return res.status(404).json({ error: "User not found" })
+    }
+
+    res.json({
+      id: user.rows[0].id,
+      googleId: user.rows[0].google_id,
+      displayName: user.rows[0].display_name,
+      email: user.rows[0].email,
+      photoURL: user.rows[0].photo_url,
+    })
+  } catch (error) {
+    console.error("Error fetching user:", error)
+    res.status(500).json({ error: "Failed to fetch user data" })
+  }
+})
+
+// Logout route
+app.post("/api/auth/logout", (req, res) => {
+  res.json({ message: "Logged out successfully" })
+})
 
 // Connect to the database and start the server
 initializeDbAndServer();
