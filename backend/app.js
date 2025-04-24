@@ -17,6 +17,7 @@ const mammoth = require('mammoth');
 const { OpenAI } = require('openai');
 const passport = require("passport")
 const GoogleStrategy = require("passport-google-oauth20").Strategy
+const crypto = require("crypto");
 // Initialize OpenAI client
 defaults = {};
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
@@ -2398,25 +2399,30 @@ app.post('/api/chatbot', async (req, res) => {
 app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }))
 
 
-app.get("/api/auth/google/callback", passport.authenticate("google", { session: false }), (req, res) => {
-  // Create JWT token
-  const token = jwt.sign(
-    {
-      id: req.user.id,
-      googleId: req.user.google_id,
-      displayName: req.user.display_name,
-      email: req.user.email,
-      photoURL: req.user.photo_url,
-    },
-    JWT_SECRET,
-    { expiresIn: "7d" },
-  )
+// Google OAuth callback route
+app.get(
+  "/api/auth/google/callback",
+  passport.authenticate("google", { session: false }),
+  (req, res) => {
+    const token = jwt.sign(
+      {
+        id: req.user.id,
+        googleId: req.user.google_id,
+        displayName: req.user.display_name,
+        email: req.user.email,
+        photoURL: req.user.photo_url
+      },
+      JWT_SECRET,
+      { expiresIn: "7d" }
+    );
 
-  // Send token and user data to client via postMessage
-  res.send(`
+    // Use the generated nonce
+    const nonce = res.locals.nonce;
+
+    res.send(`
       <html>
         <body>
-          <script>
+          <script nonce="${nonce}">
             window.opener.postMessage(
               { 
                 token: "${token}", 
@@ -2434,8 +2440,9 @@ app.get("/api/auth/google/callback", passport.authenticate("google", { session: 
           </script>
         </body>
       </html>
-    `)
-})
+    `);
+  }
+);
 
 // Get current user
 app.get("/api/auth/me", authenticateToken, async (req, res) => {
@@ -2466,5 +2473,22 @@ app.post("/api/auth/logout", (req, res) => {
   res.json({ message: "Logged out successfully" })
 })
 
+// Generate nonce for CSP
+app.use((req, res, next) => {
+  res.locals.nonce = crypto.randomBytes(16).toString("hex");
+  next();
+});
+
+// Configure Helmet with security headers
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
+        "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`]
+      }
+    }
+  })
+);
 // Connect to the database and start the server
 initializeDbAndServer();
