@@ -35,18 +35,11 @@ const pool = new Pool({
     rejectUnauthorized: false, // This bypasses certificate verification
   },
 });
+
 const generateNonce = (req, res, next) => {
-  // Generate a random nonce for each request
-  res.locals.nonce = crypto.randomBytes(16).toString("base64")
-
-  // Set CSP header with the nonce
-  res.setHeader(
-    "Content-Security-Policy",
-    `default-src 'self'; script-src 'self' 'nonce-${res.locals.nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://backend-lt9m.onrender.com https://www.googleapis.com;`,
-  )
-
-  next()
-}
+  res.locals.nonce = crypto.randomBytes(16).toString("base64");
+  next();
+};
 
 
 // Initialize Express app
@@ -2497,13 +2490,22 @@ app.use(
   helmet({
     contentSecurityPolicy: {
       directives: {
-        ...helmet.contentSecurityPolicy.getDefaultDirectives(),
-        "script-src": ["'self'", (req, res) => `'nonce-${res.locals.nonce}'`]
-      }
-    }
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          (req, res) => `'nonce-${res.locals.nonce}'`, // Dynamic nonce
+        ],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        imgSrc: ["'self'", "data:", "https:"],
+        connectSrc: [
+          "'self'",
+          "https://backend-lt9m.onrender.com",
+          "https://www.googleapis.com",
+        ],
+      },
+    },
   })
 );
-
 
 
 
