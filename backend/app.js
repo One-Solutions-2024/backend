@@ -18,6 +18,7 @@ const { OpenAI } = require('openai');
 const passport = require("passport")
 const GoogleStrategy = require("passport-google-oauth20").Strategy
 const crypto = require("crypto");
+
 // Initialize OpenAI client
 defaults = {};
 const openai = new OpenAI(process.env.OPENAI_API_KEY);
@@ -34,12 +35,26 @@ const pool = new Pool({
     rejectUnauthorized: false, // This bypasses certificate verification
   },
 });
+const generateNonce = (req, res, next) => {
+  // Generate a random nonce for each request
+  res.locals.nonce = crypto.randomBytes(16).toString("base64")
+
+  // Set CSP header with the nonce
+  res.setHeader(
+    "Content-Security-Policy",
+    `default-src 'self'; script-src 'self' 'nonce-${res.locals.nonce}'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https://backend-lt9m.onrender.com https://www.googleapis.com;`,
+  )
+
+  next()
+}
 
 
 // Initialize Express app
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
+app.use(generateNonce)
+
 // Create WebSocket server
 const wss = new WebSocket.Server({ noServer: true });
 
@@ -2400,26 +2415,25 @@ app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile",
 
 
 // Google OAuth callback route
-app.get(
-  "/api/auth/google/callback",
-  passport.authenticate("google", { session: false }),
-  (req, res) => {
-    const token = jwt.sign(
-      {
-        id: req.user.id,
-        googleId: req.user.google_id,
-        displayName: req.user.display_name,
-        email: req.user.email,
-        photoURL: req.user.photo_url
-      },
-      JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+app.get("/api/auth/google/callback", passport.authenticate("google", { session: false }), (req, res) => {
+  // Create JWT token
+  const token = jwt.sign(
+    {
+      id: req.user.id,
+      googleId: req.user.google_id,
+      displayName: req.user.display_name,
+      email: req.user.email,
+      photoURL: req.user.photo_url,
+    },
+    JWT_SECRET,
+    { expiresIn: "7d" },
+  )
 
-    // Use the generated nonce
-    const nonce = res.locals.nonce;
+  // Get the nonce from res.locals
+  const nonce = res.locals.nonce || ""
 
-    res.send(`
+  // Send token and user data to client via postMessage with nonce
+  res.send(`
       <html>
         <body>
           <script nonce="${nonce}">
@@ -2440,9 +2454,8 @@ app.get(
           </script>
         </body>
       </html>
-    `);
-  }
-);
+    `)
+})
 
 // Get current user
 app.get("/api/auth/me", authenticateToken, async (req, res) => {
@@ -2490,5 +2503,11 @@ app.use(
     }
   })
 );
+
+
+
+
+module.exports = { generateNonce }
+
 // Connect to the database and start the server
 initializeDbAndServer();
