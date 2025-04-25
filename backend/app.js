@@ -1,32 +1,43 @@
 // Import required modules
-const express = require("express");
-const { Pool } = require("pg");
-const cors = require("cors");
-const helmet = require("helmet");
-const { body, validationResult } = require("express-validator");
-const morgan = require("morgan");
-const jwt = require("jsonwebtoken");
-const fs = require("fs").promises;
-const bcrypt = require("bcrypt");
-const WebSocket = require("ws"); // Add WebSocket support
-require("dotenv").config(); // Load environment variables
+const express = require("express")
+const { Pool } = require("pg")
+const cors = require("cors")
+const helmet = require("helmet")
+const { body, validationResult } = require("express-validator")
+const morgan = require("morgan")
+const jwt = require("jsonwebtoken")
+const fs = require("fs").promises
+const bcrypt = require("bcrypt")
+const WebSocket = require("ws") // Add WebSocket support
+require("dotenv").config() // Load environment variables
 // Add these missing imports at the top
-const multer = require('multer');
-const pdfParse = require('pdf-parse');
-const mammoth = require('mammoth');
-const { OpenAI } = require('openai');
+const multer = require("multer")
+const pdfParse = require("pdf-parse")
+const mammoth = require("mammoth")
+const { OpenAI } = require("openai")
 const passport = require("passport")
 const GoogleStrategy = require("passport-google-oauth20").Strategy
-const crypto = require("crypto");
+const crypto = require("crypto")
+
+// Add the required Appwrite dependencies at the top of the file
+const { Client, Account, ID } = require("appwrite")
+
+// Initialize Appwrite client
+const appwriteClient = new Client()
+  .setEndpoint(process.env.APPWRITE_ENDPOINT || "https://cloud.appwrite.io/v1")
+  .setProject(process.env.APPWRITE_PROJECT_ID || "")
+
+// Initialize Appwrite account
+const appwriteAccount = new Account(appwriteClient)
 
 // Initialize OpenAI client
-defaults = {};
-const openai = new OpenAI(process.env.OPENAI_API_KEY);
+defaults = {}
+const openai = new OpenAI(process.env.OPENAI_API_KEY)
 
 // Configure multer for in-memory file uploads
 
-const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN"; // JWT secret from environment variables
+const PORT = process.env.PORT || 5000
+const JWT_SECRET = process.env.JWT_SECRET || "MY_SECRET_TOKEN" // JWT secret from environment variables
 
 // Initialize PostgreSQL pool using environment variable
 const pool = new Pool({
@@ -34,144 +45,139 @@ const pool = new Pool({
   ssl: {
     rejectUnauthorized: false, // This bypasses certificate verification
   },
-});
+})
 
 const generateNonce = (req, res, next) => {
-  res.locals.nonce = crypto.randomBytes(16).toString("base64");
-  next();
-};
-
+  res.locals.nonce = crypto.randomBytes(16).toString("base64")
+  next()
+}
 
 // Initialize Express app
-const app = express();
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+const app = express()
+app.use(express.json())
+app.use(express.urlencoded({ extended: true }))
 app.use(generateNonce)
 
 // Create WebSocket server
-const wss = new WebSocket.Server({ noServer: true });
+const wss = new WebSocket.Server({ noServer: true })
 
 // Backend WebSocket handling
-wss.on('connection', (ws, req) => {
-  console.log("New WebSocket connection");
-  const token = req.headers.authorization?.split(' ')[1];
+wss.on("connection", (ws, req) => {
+  console.log("New WebSocket connection")
+  const token = req.headers.authorization?.split(" ")[1]
 
   if (token) {
     jwt.verify(token, JWT_SECRET, (err, user) => {
       if (!err) {
-        ws.userPhone = user.phone; // Attach phone instead of ID
+        ws.userPhone = user.phone // Attach phone instead of ID
       }
-    });
+    })
   }
 
-  ws.on('message', (message) => {
-    const data = JSON.parse(message);
+  ws.on("message", (message) => {
+    const data = JSON.parse(message)
     switch (data.type) {
-      case 'register_phone':
-        ws.userPhone = data.phone;
-        break;
-      case 'direct_message':
-        handleDirectMessage(data);
-        break;
+      case "register_phone":
+        ws.userPhone = data.phone
+        break
+      case "direct_message":
+        handleDirectMessage(data)
+        break
     }
-  });
-});
-
-
+  })
+})
 
 // Middleware
-app.use(express.json());
-app.use(cors());
-app.use(helmet()); // Basic security headers
-app.use(morgan("combined")); // Logging
+app.use(express.json())
+app.use(cors())
+app.use(helmet()) // Basic security headers
+app.use(morgan("combined")) // Logging
 // Configure CORS for external access
 const corsOptions = {
   origin: "*", // Replace "*" with specific domains for production
-};
-app.use(cors(corsOptions));
-
+}
+app.use(cors(corsOptions))
 
 const getClientIp = (req) => {
-  const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress;
-  return ip.split(",")[0].trim(); // Handles proxies and IPv6
-};
+  const ip = req.headers["x-forwarded-for"] || req.connection.remoteAddress
+  return ip.split(",")[0].trim() // Handles proxies and IPv6
+}
 
 const authenticateToken = (req, res, next) => {
-  const authHeader = req.headers['authorization'];
-  const token = authHeader && authHeader.split(' ')[1];
+  const authHeader = req.headers["authorization"]
+  const token = authHeader && authHeader.split(" ")[1]
 
-  if (!token) return res.status(401).json({ error: "Token required" });
+  if (!token) return res.status(401).json({ error: "Token required" })
 
   jwt.verify(token, JWT_SECRET, (err, user) => {
-    if (err) return res.status(403).json({ error: "Invalid token" });
-    req.user = user; // Save decoded token data (e.g., user id and role)
-    next();
-  });
-};
+    if (err) return res.status(403).json({ error: "Invalid token" })
+    req.user = user // Save decoded token data (e.g., user id and role)
+    next()
+  })
+}
 const authorizeAdmin = (req, res, next) => {
   if (req.user.role !== "admin") {
-    return res.status(403).json({ error: "Admin access required" });
+    return res.status(403).json({ error: "Admin access required" })
   }
-  next();
-};
+  next()
+}
 
 // Configure passport with Google strategy
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: "https://backend-lt9m.onrender.com/api/auth/google/callback",
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        // Check if user exists in database
-        const existingUser = await pool.query("SELECT * FROM users WHERE google_id = $1", [profile.id])
+// passport.use(
+//   new GoogleStrategy(
+//     {
+//       clientID: process.env.GOOGLE_CLIENT_ID,
+//       clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+//       callbackURL: "https://backend-lt9m.onrender.com/api/auth/google/callback",
+//     },
+//     async (accessToken, refreshToken, profile, done) => {
+//       try {
+//         // Check if user exists in database
+//         const existingUser = await pool.query("SELECT * FROM users WHERE google_id = $1", [profile.id])
 
-        if (existingUser.rows.length) {
-          // User exists, update last login
-          await pool.query("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE google_id = $1", [profile.id])
-          return done(null, existingUser.rows[0])
-        }
+//         if (existingUser.rows.length) {
+//           // User exists, update last login
+//           await pool.query("UPDATE users SET last_login = CURRENT_TIMESTAMP WHERE google_id = $1", [profile.id])
+//           return done(null, existingUser.rows[0])
+//         }
 
-        // Create new user
-        const newUser = await pool.query(
-          `INSERT INTO users (
-          google_id, 
-          display_name, 
-          email, 
-          photo_url, 
-          created_at, 
-          last_login
-        ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING *`,
-          [profile.id, profile.displayName, profile.emails[0].value, profile.photos[0].value],
-        )
+//         // Create new user
+//         const newUser = await pool.query(
+//           `INSERT INTO users (
+//           google_id,
+//           display_name,
+//           email,
+//           photo_url,
+//           created_at,
+//           last_login
+//         ) VALUES ($1, $2, $3, $4, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP) RETURNING *`,
+//           [profile.id, profile.displayName, profile.emails[0].value, profile.photos[0].value],
+//         )
 
-        return done(null, newUser.rows[0])
-      } catch (error) {
-        return done(error, null)
-      }
-    },
-  ),
-)
+//         return done(null, newUser.rows[0])
+//       } catch (error) {
+//         return done(error, null)
+//       }
+//     },
+//   ),
+// )
 
 // Serialize and deserialize user
-passport.serializeUser((user, done) => {
-  done(null, user.id)
-})
+// passport.serializeUser((user, done) => {
+//   done(null, user.id)
+// })
 
-passport.deserializeUser(async (id, done) => {
-  try {
-    const user = await pool.query("SELECT * FROM users WHERE id = $1", [id])
-    done(null, user.rows[0])
-  } catch (error) {
-    done(error, null)
-  }
-})
+// passport.deserializeUser(async (id, done) => {
+//   try {
+//     const user = await pool.query("SELECT * FROM users WHERE id = $1", [id])
+//     done(null, user.rows[0])
+//   } catch (error) {
+//     done(error, null)
+//   }
+// })
 
 // Initialize passport middleware
-app.use(passport.initialize())
-
+// app.use(passport.initialize())
 
 // Modified admin registration route
 app.post(
@@ -184,38 +190,38 @@ app.post(
     body("admin_image_link").isURL(),
   ],
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
 
-    const { adminname, username, password, phone, admin_image_link } = req.body;
+    const { adminname, username, password, phone, admin_image_link } = req.body
 
     try {
       // Check if any admin exists
-      const adminCount = await pool.query("SELECT COUNT(*) FROM admin;");
-      const isFirstAdmin = adminCount.rows[0].count === '0'; // Check if it's the first admin
+      const adminCount = await pool.query("SELECT COUNT(*) FROM admin;")
+      const isFirstAdmin = adminCount.rows[0].count === "0" // Check if it's the first admin
 
       // Check if username or phone exists
-      const existingAdmin = await pool.query(
-        "SELECT * FROM admin WHERE username = $1 OR phone = $2;",
-        [username, phone]
-      );
+      const existingAdmin = await pool.query("SELECT * FROM admin WHERE username = $1 OR phone = $2;", [
+        username,
+        phone,
+      ])
       if (existingAdmin.rows.length) {
-        return res.status(400).json({ error: "Username or phone already exists" });
+        return res.status(400).json({ error: "Username or phone already exists" })
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 10)
 
       // Determine status, is_approved, and created_by
-      const status = isFirstAdmin ? "approved" : "pending";
-      const isApproved = isFirstAdmin;
-      const createdBy = isFirstAdmin ? null : req.user?.id; // First admin has no creator
+      const status = isFirstAdmin ? "approved" : "pending"
+      const isApproved = isFirstAdmin
+      const createdBy = isFirstAdmin ? null : req.user?.id // First admin has no creator
 
       const insertAdminQuery = `
         INSERT INTO admin (adminname, username, password, phone, admin_image_link, status, is_approved, created_by)
         VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
         RETURNING id, status, is_approved;
-      `;
+      `
 
       const newAdmin = await pool.query(insertAdminQuery, [
         adminname,
@@ -225,51 +231,45 @@ app.post(
         admin_image_link || null,
         status,
         isApproved,
-        createdBy
-      ]);
+        createdBy,
+      ])
 
       const responseData = {
-        message: isFirstAdmin
-          ? "First admin registered successfully"
-          : "Registration submitted for approval",
+        message: isFirstAdmin ? "First admin registered successfully" : "Registration submitted for approval",
         adminId: newAdmin.rows[0].id,
         status: newAdmin.rows[0].status,
-        is_approved: newAdmin.rows[0].is_approved
-      };
+        is_approved: newAdmin.rows[0].is_approved,
+      }
 
-      res.status(201).json(responseData);
+      res.status(201).json(responseData)
     } catch (error) {
-      console.error(`Error registering admin: ${error.message}`);
-      res.status(500).json({ error: "Registration failed" });
+      console.error(`Error registering admin: ${error.message}`)
+      res.status(500).json({ error: "Registration failed" })
     }
-  }
-);
-
+  },
+)
 
 // Modified admin login route
 // Update the login route to include phone in JWT
 app.post("/api/admin/login", async (req, res) => {
-  const { username, password } = req.body;
+  const { username, password } = req.body
   try {
-    const adminResult = await pool.query(
-      "SELECT * FROM admin WHERE username = $1;",
-      [username]
-    );
+    const adminResult = await pool.query("SELECT * FROM admin WHERE username = $1;", [username])
 
     if (!adminResult.rows.length) {
-      return res.status(401).json({ error: "Invalid credentials or Please Register" });
+      return res.status(401).json({ error: "Invalid credentials or Please Register" })
     }
 
-    const admin = adminResult.rows[0];
-    const isFirstAdmin = admin.created_by === null && admin.is_approved;
+    const admin = adminResult.rows[0]
+    const isFirstAdmin = admin.created_by === null && admin.is_approved
 
-    if (admin.status !== 'approved') {
-      return res.status(403).json({ error: "Account pending approval" });
+    if (admin.status !== "approved") {
+      return res.status(403).json({ error: "Account pending approval" })
     }
 
-    const passwordMatch = await bcrypt.compare(password, admin.password);
+    const passwordMatch = await bcrypt.compare(password, admin.password)
     if (!passwordMatch) {
-      return res.status(401).json({ error: "Invalid Passward" });
+      return res.status(401).json({ error: "Invalid Passward" })
     }
 
     // Include phone in JWT
@@ -277,12 +277,12 @@ app.post("/api/admin/login", async (req, res) => {
       {
         id: admin.id,
         username: admin.username,
-        phone: admin.phone,  // Add this line
-        role: "admin"
+        phone: admin.phone, // Add this line
+        role: "admin",
       },
       JWT_SECRET,
-      { expiresIn: "1h" }
-    );
+      { expiresIn: "1h" },
+    )
 
     res.json({
       message: "Login successful",
@@ -293,85 +293,78 @@ app.post("/api/admin/login", async (req, res) => {
         phone: admin.phone,
         admin_image_link: admin.admin_image_link,
         status: admin.status,
-        isFirstAdmin
-      }
-    });
+        isFirstAdmin,
+      },
+    })
   } catch (error) {
-    console.error(`Login error: ${error.message}`);
-    res.status(500).json({ error: "Login failed" });
+    console.error(`Login error: ${error.message}`)
+    res.status(500).json({ error: "Login failed" })
   }
-});
+})
 
 // New route to get pending admins (admin access only)
 app.get("/api/admin/pending", authenticateToken, authorizeAdmin, async (req, res) => {
   try {
     const pendingAdmins = await pool.query(
-      "SELECT id, adminname, username, phone, admin_image_link, createdat FROM admin WHERE status = 'pending';"
-    );
-    res.json(pendingAdmins.rows);
+      "SELECT id, adminname, username, phone, admin_image_link, createdat FROM admin WHERE status = 'pending';",
+    )
+    res.json(pendingAdmins.rows)
   } catch (error) {
-    console.error(`Error fetching pending admins: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve pending admins" });
+    console.error(`Error fetching pending admins: ${error.message}`)
+    res.status(500).json({ error: "Failed to retrieve pending admins" })
   }
-});
+})
 
 // New route to approve admins (admin access only)
 app.put("/api/admin/approve/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params
 
   // Validate ID (Ensure it's a positive number)
   if (isNaN(id) || id <= 0) {
-    return res.status(400).json({ error: "Invalid admin ID" });
+    return res.status(400).json({ error: "Invalid admin ID" })
   }
 
   try {
     // Check if the admin exists and is still pending approval
-    const checkAdmin = await pool.query(
-      "SELECT * FROM admin WHERE id = $1 AND status = 'pending';",
-      [id]
-    );
+    const checkAdmin = await pool.query("SELECT * FROM admin WHERE id = $1 AND status = 'pending';", [id])
 
     if (checkAdmin.rows.length === 0) {
-      return res.status(404).json({ error: "Admin not found or already approved" });
+      return res.status(404).json({ error: "Admin not found or already approved" })
     }
 
     // Approve admin and set created_by (who approved them)
     const result = await pool.query(
       "UPDATE admin SET status = 'approved', is_approved = TRUE, created_by = $1 WHERE id = $2 RETURNING *;",
-      [req.user.id, id]
-    );
+      [req.user.id, id],
+    )
 
     res.json({
       message: "Admin approved successfully",
       admin: result.rows[0],
-    });
+    })
   } catch (error) {
-    console.error(`Approval error: ${error.message}`);
-    res.status(500).json({ error: "Approval failed" });
+    console.error(`Approval error: ${error.message}`)
+    res.status(500).json({ error: "Approval failed" })
   }
-});
-
+})
 
 // New route to reject admins (admin access only)
 app.put("/api/admin/reject/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params
 
   try {
-    const result = await pool.query(
-      "DELETE FROM admin WHERE id = $1 RETURNING *;",
-      [id]
-    );
+    const result = await pool.query("DELETE FROM admin WHERE id = $1 RETURNING *;", [id])
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Admin not found" });
+      return res.status(404).json({ error: "Admin not found" })
     }
 
-    res.json({ message: "Admin rejected and removed from the system" });
+    res.json({ message: "Admin rejected and removed from the system" })
   } catch (error) {
-    console.error(`Rejection error: ${error.message}`);
-    res.status(500).json({ error: "Rejection failed" });
+    console.error(`Rejection error: ${error.message}`)
+    res.status(500).json({ error: "Rejection failed" })
   }
-});
+})
 
 // ... (rest of the code remains the same)
 
@@ -392,8 +385,35 @@ const initializeDbAndServer = async () => {
         created_by INT REFERENCES admin(id), -- This should work as long as 'id' is a primary key
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-    `);
+    `)
 
+    // Add the advanced_data column to the job table in the initializeDbAndServer function
+    // Find the CREATE TABLE IF NOT EXISTS job query and modify it to include advanced_data
+
+    // Replace this:
+    // await pool.query(`
+    //   CREATE TABLE IF NOT EXISTS job (
+    //     id SERIAL PRIMARY KEY,
+    //     companyname TEXT NOT NULL,
+    //     title TEXT NOT NULL,
+    //     description TEXT NOT NULL,
+    //     apply_link TEXT NOT NULL,
+    //     image_link TEXT NOT NULL,
+    //     url TEXT NOT NULL,
+    //     salary TEXT NOT NULL,
+    //     location TEXT NOT NULL,
+    //     job_type TEXT NOT NULL,
+    //     experience TEXT NOT NULL,
+    //     batch TEXT NOT NULL,
+    //     job_uploader TEXT NOT NULL,
+    //     approved_by INT REFERENCES admin(id),
+    //     created_by INT REFERENCES admin(id), -- This field references the admin who created the job
+    //     status VARCHAR(20) DEFAULT 'pending',
+    //     createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    //   );
+    // `);
+
+    // With this:
     await pool.query(`
       CREATE TABLE IF NOT EXISTS job (
         id SERIAL PRIMARY KEY,
@@ -412,9 +432,10 @@ const initializeDbAndServer = async () => {
         approved_by INT REFERENCES admin(id),
         created_by INT REFERENCES admin(id), -- This field references the admin who created the job
         status VARCHAR(20) DEFAULT 'pending',
+        advanced_data TEXT,
         createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-    `);
+    `)
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS job_viewers (
@@ -424,7 +445,7 @@ const initializeDbAndServer = async () => {
         viewed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE (job_id, ip_address)
     );
-    `);
+    `)
     // Create popup_content table
     await pool.query(`
           CREATE TABLE IF NOT EXISTS popup_content (
@@ -439,7 +460,7 @@ const initializeDbAndServer = async () => {
           status VARCHAR(20) DEFAULT 'pending',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-    `);
+    `)
 
     // Add tables for chat functionality
     await pool.query(`
@@ -448,7 +469,7 @@ const initializeDbAndServer = async () => {
         room_name TEXT NOT NULL UNIQUE,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-    `);
+    `)
 
     await pool.query(`
       CREATE TABLE IF NOT EXISTS chat_messages (
@@ -458,7 +479,7 @@ const initializeDbAndServer = async () => {
         message TEXT NOT NULL,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
-    `);
+    `)
 
     // Create table for direct messages (one-to-one chats)
     await pool.query(`
@@ -469,7 +490,7 @@ const initializeDbAndServer = async () => {
           message TEXT NOT NULL,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-      `);
+      `)
 
     // Add new tables
     await pool.query(`
@@ -480,7 +501,7 @@ const initializeDbAndServer = async () => {
           end_time TIMESTAMP,
           duration INTERVAL
         );
-      `);
+      `)
 
     await pool.query(`
         CREATE TABLE IF NOT EXISTS monthly_reports (
@@ -491,7 +512,7 @@ const initializeDbAndServer = async () => {
           total_time BIGINT,
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-      `);
+      `)
 
     // Add these to your existing table creation
     await pool.query(`
@@ -506,7 +527,7 @@ const initializeDbAndServer = async () => {
           status VARCHAR(10) DEFAULT 'pending',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         );
-      `);
+      `)
 
     // Add new table for tracking clicks
     await pool.query(`
@@ -517,7 +538,7 @@ const initializeDbAndServer = async () => {
     clicked_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (job_id, ip_address)
   );
-`);
+`)
 
     await pool.query(`
   CREATE TABLE IF NOT EXISTS comments (
@@ -527,7 +548,7 @@ const initializeDbAndServer = async () => {
     comment_text TEXT NOT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
-`);
+`)
 
     // Create resumes table
     await pool.query(`
@@ -544,10 +565,10 @@ const initializeDbAndServer = async () => {
     match_percentage FLOAT,
     uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
   );
-`);
+`)
 
-try {
-  await pool.query(`
+    try {
+      await pool.query(`
     CREATE TABLE IF NOT EXISTS users (
       id SERIAL PRIMARY KEY,
       google_id TEXT UNIQUE NOT NULL,
@@ -558,26 +579,26 @@ try {
       last_login TIMESTAMP
     );
   `)
-  console.log("Users table initialized")
-} catch (error) {
-  console.error("Error initializing users table:", error.message)
-}
+      console.log("Users table initialized")
+    } catch (error) {
+      console.error("Error initializing users table:", error.message)
+    }
 
-    const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content");
-    const popupCount = popUpCountResult.rows[0].count;
+    const popUpCountResult = await pool.query("SELECT COUNT(*) as count FROM popup_content")
+    const popupCount = popUpCountResult.rows[0].count
 
     if (popupCount == 0) {
       try {
-        const data = await fs.readFile("pops.json", "utf8");
-        const popList = JSON.parse(data); // popList should be an array
+        const data = await fs.readFile("pops.json", "utf8")
+        const popList = JSON.parse(data) // popList should be an array
 
         if (!Array.isArray(popList)) {
-          throw new Error("pops.json content is not an array");
+          throw new Error("pops.json content is not an array")
         }
         const insertPopQuery = `
           INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link)
           VALUES ($1, $2, $3, $4, $5);
-        `;
+        `
         for (const popup_content of popList) {
           await pool.query(insertPopQuery, [
             popup_content.popup_heading,
@@ -585,26 +606,26 @@ try {
             popup_content.popup_link,
             popup_content.popup_belowtext,
             popup_content.popup_routing_link,
-          ]);
+          ])
         }
-        console.log("Pop Data Imported Successfully");
+        console.log("Pop Data Imported Successfully")
       } catch (error) {
-        console.error("Error reading or processing pops.json:", error.message);
-        throw error; // rethrow the error to prevent the server from starting
+        console.error("Error reading or processing pops.json:", error.message)
+        throw error // rethrow the error to prevent the server from starting
       }
     }
     // Insert jobs if table is empty
-    const jobsCountResult = await pool.query("SELECT COUNT(*) as count FROM job;");
-    const jobsCount = jobsCountResult.rows[0].count;
+    const jobsCountResult = await pool.query("SELECT COUNT(*) as count FROM job;")
+    const jobsCount = jobsCountResult.rows[0].count
 
     if (jobsCount == 0) {
-      const data = await fs.readFile("jobs.json", "utf8");
-      const jobList = JSON.parse(data);
+      const data = await fs.readFile("jobs.json", "utf8")
+      const jobList = JSON.parse(data)
 
       const insertJobQuery = `
          INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12);
-       `;
+       `
 
       for (const job of jobList) {
         await pool.query(insertJobQuery, [
@@ -620,22 +641,21 @@ try {
           job.experience,
           job.batch,
           job.job_uploader,
-        ]);
+        ])
       }
-      console.log("Job data has been imported successfully.");
+      console.log("Job data has been imported successfully.")
     }
 
-
     // Check if there are any admins in the table
-    const adminCountResult = await pool.query("SELECT COUNT(*) as count FROM admin;");
-    const adminCount = adminCountResult.rows[0].count;
+    const adminCountResult = await pool.query("SELECT COUNT(*) as count FROM admin;")
+    const adminCount = adminCountResult.rows[0].count
     if (adminCount == 0) {
-      const data = await fs.readFile("admin.json", "utf8");
-      const adminList = JSON.parse(data);
+      const data = await fs.readFile("admin.json", "utf8")
+      const adminList = JSON.parse(data)
       const insertAdminQuery = `
          INSERT INTO admin (adminname, username, password, phone, admin_image_link)
          VALUES ($1, $2, $3, $4, $5);
-       `;
+       `
 
       for (const admin of adminList) {
         await pool.query(insertAdminQuery, [
@@ -644,44 +664,38 @@ try {
           admin.password,
           admin.phone,
           admin.admin_image_link,
-        ]);
+        ])
       }
-      console.log("Admin data has been imported successfully.");
+      console.log("Admin data has been imported successfully.")
     }
-
 
     // Start server
     const server = app.listen(PORT, () => {
-      console.log(`Server is running on http://localhost:${PORT}/`);
-    });
+      console.log(`Server is running on http://localhost:${PORT}/`)
+    })
 
     // Upgrade HTTP server to WebSocket
     server.on("upgrade", (request, socket, head) => {
       wss.handleUpgrade(request, socket, head, (ws) => {
-        wss.emit("connection", ws, request);
-      });
-    });
-
-
+        wss.emit("connection", ws, request)
+      })
+    })
   } catch (error) {
-    console.error(`Error initializing the database: ${error.message}`);
-    process.exit(1);
+    console.error(`Error initializing the database: ${error.message}`)
+    process.exit(1)
   }
-};
+}
 // Get comments for a job
 app.get("/api/comments/:jobId", async (req, res) => {
-  const { jobId } = req.params;
+  const { jobId } = req.params
   try {
-    const result = await pool.query(
-      "SELECT * FROM comments WHERE job_id = $1 ORDER BY created_at DESC",
-      [jobId]
-    );
-    res.json(result.rows);
+    const result = await pool.query("SELECT * FROM comments WHERE job_id = $1 ORDER BY created_at DESC", [jobId])
+    res.json(result.rows)
   } catch (error) {
-    console.error("Error fetching comments:", error);
-    res.status(500).json({ error: "Failed to fetch comments" });
+    console.error("Error fetching comments:", error)
+    res.status(500).json({ error: "Failed to fetch comments" })
   }
-});
+})
 
 // Post new comment
 app.post(
@@ -689,31 +703,31 @@ app.post(
   [
     body("user_name").trim().notEmpty().withMessage("Name is required"),
     body("comment_text").trim().notEmpty().withMessage("Comment cannot be empty"),
-    body("job_id").isInt().withMessage("Invalid job ID")
+    body("job_id").isInt().withMessage("Invalid job ID"),
   ],
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
 
-    const { job_id, user_name, comment_text } = req.body;
+    const { job_id, user_name, comment_text } = req.body
 
     try {
       const result = await pool.query(
         "INSERT INTO comments (job_id, user_name, comment_text) VALUES ($1, $2, $3) RETURNING *",
-        [job_id, user_name, comment_text]
-      );
+        [job_id, user_name, comment_text],
+      )
 
-      res.status(201).json(result.rows[0]);
+      res.status(201).json(result.rows[0])
     } catch (error) {
-      console.error("Error posting comment:", error);
-      res.status(500).json({ error: "Failed to post comment" });
+      console.error("Error posting comment:", error)
+      res.status(500).json({ error: "Failed to post comment" })
     }
-  }
-);
+  },
+)
 // Route to record apply clicks
 app.post("/api/jobs/:id/click", async (req, res) => {
-  const { id } = req.params;
-  const ipAddress = getClientIp(req);
+  const { id } = req.params
+  const ipAddress = getClientIp(req)
 
   try {
     const query = `
@@ -721,60 +735,59 @@ app.post("/api/jobs/:id/click", async (req, res) => {
       VALUES ($1, $2, CURRENT_TIMESTAMP)
       ON CONFLICT (job_id, ip_address)
       DO UPDATE SET clicked_at = CURRENT_TIMESTAMP;
-    `;
-    await pool.query(query, [id, ipAddress]);
+    `
+    await pool.query(query, [id, ipAddress])
 
     // Get updated click count
     const countQuery = `
       SELECT COUNT(DISTINCT ip_address) AS click_count
       FROM job_clicks
       WHERE job_id = $1;
-    `;
-    const result = await pool.query(countQuery, [id]);
+    `
+    const result = await pool.query(countQuery, [id])
 
     res.status(200).json({
       message: "Click recorded successfully",
-      click_count: result.rows[0].click_count
-    });
+      click_count: result.rows[0].click_count,
+    })
   } catch (error) {
-    console.error(`Error recording job click: ${error.message}`);
-    res.status(500).json({ error: "Failed to record click" });
+    console.error(`Error recording job click: ${error.message}`)
+    res.status(500).json({ error: "Failed to record click" })
   }
-});
+})
 // Add this route to get session status
-app.get('/api/session/status', authenticateToken, async (req, res) => {
+app.get("/api/session/status", authenticateToken, async (req, res) => {
   try {
-    const adminId = req.user.id;
+    const adminId = req.user.id
 
     // Get current session
     const activeSession = await pool.query(
       `SELECT * FROM admin_sessions 
        WHERE admin_id = $1 AND end_time IS NULL`,
-      [adminId]
-    );
+      [adminId],
+    )
 
     // Calculate today's total time
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    const todayStart = new Date()
+    todayStart.setHours(0, 0, 0, 0)
 
     const todayResult = await pool.query(
       `SELECT SUM(EXTRACT(EPOCH FROM duration)) as total
        FROM admin_sessions 
        WHERE admin_id = $1 AND start_time >= $2`,
-      [adminId, todayStart]
-    );
+      [adminId, todayStart],
+    )
 
     res.json({
       isOnline: activeSession.rows.length > 0,
       todayTotal: todayResult.rows[0].total || 0,
-      currentSessionStart: activeSession.rows[0]?.start_time
-    });
+      currentSessionStart: activeSession.rows[0]?.start_time,
+    })
   } catch (error) {
-    console.error('Error fetching session status:', error);
-    res.status(500).json({ error: 'Failed to get session status' });
+    console.error("Error fetching session status:", error)
+    res.status(500).json({ error: "Failed to get session status" })
   }
-});
-
+})
 
 // Session endpoints
 // Add this route in your backend code
@@ -788,95 +801,90 @@ app.get("/api/admins/status/individual", authenticateToken, async (req, res) => 
              ) as is_online
       FROM admin a
       WHERE a.is_approved = TRUE;
-    `);
-    res.json(result.rows);
+    `)
+    res.json(result.rows)
   } catch (error) {
-    console.error(`Error fetching admin statuses: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve admin statuses" });
+    console.error(`Error fetching admin statuses: ${error.message}`)
+    res.status(500).json({ error: "Failed to retrieve admin statuses" })
   }
-});
+})
 
-app.post('/api/session/start', authenticateToken, async (req, res) => {
+app.post("/api/session/start", authenticateToken, async (req, res) => {
   try {
-    const adminId = req.user.id;
-    const existingSession = await pool.query(
-      'SELECT * FROM admin_sessions WHERE admin_id = $1 AND end_time IS NULL',
-      [adminId]
-    );
+    const adminId = req.user.id
+    const existingSession = await pool.query("SELECT * FROM admin_sessions WHERE admin_id = $1 AND end_time IS NULL", [
+      adminId,
+    ])
 
     if (existingSession.rows.length > 0) {
-      return res.status(400).json({ error: 'Session already active' });
+      return res.status(400).json({ error: "Session already active" })
     }
 
-    const startTime = new Date();
-    await pool.query(
-      'INSERT INTO admin_sessions (admin_id, start_time) VALUES ($1, $2)',
-      [adminId, startTime]
-    );
+    const startTime = new Date()
+    await pool.query("INSERT INTO admin_sessions (admin_id, start_time) VALUES ($1, $2)", [adminId, startTime])
 
-    res.json({ message: 'Session started', startTime });
+    res.json({ message: "Session started", startTime })
   } catch (error) {
-    console.error('Error starting session:', error);
-    res.status(500).json({ error: 'Failed to start session' });
+    console.error("Error starting session:", error)
+    res.status(500).json({ error: "Failed to start session" })
   }
-});
+})
 
-app.post('/api/session/end', authenticateToken, async (req, res) => {
+app.post("/api/session/end", authenticateToken, async (req, res) => {
   try {
-    const adminId = req.user.id;
-    const activeSession = await pool.query(
-      'SELECT * FROM admin_sessions WHERE admin_id = $1 AND end_time IS NULL',
-      [adminId]
-    );
+    const adminId = req.user.id
+    const activeSession = await pool.query("SELECT * FROM admin_sessions WHERE admin_id = $1 AND end_time IS NULL", [
+      adminId,
+    ])
 
     if (activeSession.rows.length === 0) {
-      return res.status(400).json({ error: 'No active session' });
+      return res.status(400).json({ error: "No active session" })
     }
 
-    const endTime = new Date();
-    const startTime = activeSession.rows[0].start_time;
-    const duration = Math.floor((endTime - startTime) / 1000);
+    const endTime = new Date()
+    const startTime = activeSession.rows[0].start_time
+    const duration = Math.floor((endTime - startTime) / 1000)
 
     await pool.query(
       `UPDATE admin_sessions 
        SET end_time = $1, duration = $2 * INTERVAL '1 second'
        WHERE id = $3`,
-      [endTime, duration, activeSession.rows[0].id]
-    );
+      [endTime, duration, activeSession.rows[0].id],
+    )
 
-    res.json({ message: 'Session ended', duration });
+    res.json({ message: "Session ended", duration })
   } catch (error) {
-    console.error('Error ending session:', error);
-    res.status(500).json({ error: 'Failed to end session' });
+    console.error("Error ending session:", error)
+    res.status(500).json({ error: "Failed to end session" })
   }
-});
+})
 
-app.post('/api/session/update', authenticateToken, async (req, res) => {
+app.post("/api/session/update", authenticateToken, async (req, res) => {
   try {
-    const adminId = req.user.id;
-    const { duration } = req.body;
+    const adminId = req.user.id
+    const { duration } = req.body
 
     await pool.query(
       `UPDATE admin_sessions 
        SET duration = $1 * INTERVAL '1 second'
        WHERE admin_id = $2 AND end_time IS NULL`,
-      [duration, adminId]
-    );
+      [duration, adminId],
+    )
 
-    res.json({ success: true });
+    res.json({ success: true })
   } catch (error) {
-    console.error('Error updating session:', error);
-    res.status(500).json({ error: 'Failed to update session' });
+    console.error("Error updating session:", error)
+    res.status(500).json({ error: "Failed to update session" })
   }
-});
+})
 // Monthly report job
-const schedule = require('node-schedule');
+const schedule = require("node-schedule")
 // Monthly report generation (runs last day of month at 23:59)
-schedule.scheduleJob('59 23 L * *', async () => {
+schedule.scheduleJob("59 23 L * *", async () => {
   try {
-    const now = new Date();
-    const month = now.getMonth() + 1;
-    const year = now.getFullYear();
+    const now = new Date()
+    const month = now.getMonth() + 1
+    const year = now.getFullYear()
 
     const result = await pool.query(
       `INSERT INTO monthly_reports (admin_id, month, year, total_time)
@@ -889,27 +897,24 @@ schedule.scheduleJob('59 23 L * *', async () => {
        WHERE EXTRACT(MONTH FROM start_time) = $1
          AND EXTRACT(YEAR FROM start_time) = $2
        GROUP BY admin_id`,
-      [month, year]
-    );
+      [month, year],
+    )
   } catch (error) {
-    console.error('Error generating monthly report:', error);
+    console.error("Error generating monthly report:", error)
   }
-});
+})
 
 // Edit group chat room (Admin only)
 app.put("/api/chat/rooms/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { room_name } = req.body;
+  const { id } = req.params
+  const { room_name } = req.body
 
   try {
     // Check for existing room with same name
-    const existingRoom = await pool.query(
-      "SELECT * FROM chat_rooms WHERE room_name = $1 AND id != $2",
-      [room_name, id]
-    );
+    const existingRoom = await pool.query("SELECT * FROM chat_rooms WHERE room_name = $1 AND id != $2", [room_name, id])
 
     if (existingRoom.rows.length > 0) {
-      return res.status(400).json({ error: "Room name already exists" });
+      return res.status(400).json({ error: "Room name already exists" })
     }
 
     const updateQuery = `
@@ -917,92 +922,92 @@ app.put("/api/chat/rooms/:id", authenticateToken, authorizeAdmin, async (req, re
       SET room_name = $1 
       WHERE id = $2 
       RETURNING *;
-    `;
+    `
 
-    const result = await pool.query(updateQuery, [room_name, id]);
+    const result = await pool.query(updateQuery, [room_name, id])
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
+      return res.status(404).json({ error: "Room not found" })
     }
 
-    res.json(result.rows[0]);
+    res.json(result.rows[0])
   } catch (error) {
-    console.error(`Error updating room: ${error.message}`);
-    res.status(500).json({ error: "Failed to update room" });
+    console.error(`Error updating room: ${error.message}`)
+    res.status(500).json({ error: "Failed to update room" })
   }
-});
+})
 
 // Delete group chat room (Admin only)
 app.delete("/api/chat/rooms/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params
 
   try {
     // Delete related messages first
-    await pool.query("DELETE FROM chat_messages WHERE room_id = $1", [id]);
+    await pool.query("DELETE FROM chat_messages WHERE room_id = $1", [id])
 
-    const deleteQuery = "DELETE FROM chat_rooms WHERE id = $1 RETURNING *";
-    const result = await pool.query(deleteQuery, [id]);
+    const deleteQuery = "DELETE FROM chat_rooms WHERE id = $1 RETURNING *"
+    const result = await pool.query(deleteQuery, [id])
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Room not found" });
+      return res.status(404).json({ error: "Room not found" })
     }
 
-    res.json({ message: "Room deleted successfully" });
+    res.json({ message: "Room deleted successfully" })
   } catch (error) {
-    console.error(`Error deleting room: ${error.message}`);
-    res.status(500).json({ error: "Failed to delete room" });
+    console.error(`Error deleting room: ${error.message}`)
+    res.status(500).json({ error: "Failed to delete room" })
   }
-});
+})
 
 // Chat Routes
 app.post("/api/chat/rooms", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { room_name } = req.body;
+  const { room_name } = req.body
 
   try {
     const insertRoomQuery = `
       INSERT INTO chat_rooms (room_name)
       VALUES ($1)
       RETURNING *;
-    `;
-    const newRoom = await pool.query(insertRoomQuery, [room_name]);
-    res.status(201).json(newRoom.rows[0]);
+    `
+    const newRoom = await pool.query(insertRoomQuery, [room_name])
+    res.status(201).json(newRoom.rows[0])
   } catch (error) {
-    console.error(`Error creating chat room: ${error.message}`);
-    res.status(500).json({ error: "Failed to create chat room" });
+    console.error(`Error creating chat room: ${error.message}`)
+    res.status(500).json({ error: "Failed to create chat room" })
   }
-});
+})
 
 app.get("/api/chat/rooms", authenticateToken, async (req, res) => {
   try {
-    const roomsQuery = "SELECT * FROM chat_rooms ORDER BY created_at DESC;";
-    const rooms = await pool.query(roomsQuery);
-    res.json(rooms.rows);
+    const roomsQuery = "SELECT * FROM chat_rooms ORDER BY created_at DESC;"
+    const rooms = await pool.query(roomsQuery)
+    res.json(rooms.rows)
   } catch (error) {
-    console.error(`Error fetching chat rooms: ${error.message}`);
-    res.status(500).json({ error: "Failed to fetch chat rooms" });
+    console.error(`Error fetching chat rooms: ${error.message}`)
+    res.status(500).json({ error: "Failed to fetch chat rooms" })
   }
-});
+})
 
 app.post("/api/chat/messages", authenticateToken, async (req, res) => {
-  const { room_id, message } = req.body;
-  const sender_id = req.user.id;
+  const { room_id, message } = req.body
+  const sender_id = req.user.id
 
   try {
     const insertMessageQuery = `
       INSERT INTO chat_messages (room_id, sender_id, message)
       VALUES ($1, $2, $3)
       RETURNING *;
-    `;
-    const newMessage = await pool.query(insertMessageQuery, [room_id, sender_id, message]);
-    res.status(201).json(newMessage.rows[0]);
+    `
+    const newMessage = await pool.query(insertMessageQuery, [room_id, sender_id, message])
+    res.status(201).json(newMessage.rows[0])
   } catch (error) {
-    console.error(`Error sending message: ${error.message}`);
-    res.status(500).json({ error: "Failed to send message" });
+    console.error(`Error sending message: ${error.message}`)
+    res.status(500).json({ error: "Failed to send message" })
   }
-});
+})
 
 app.get("/api/chat/messages/:room_id", authenticateToken, async (req, res) => {
-  const { room_id } = req.params;
+  const { room_id } = req.params
 
   try {
     const messagesQuery = `
@@ -1011,213 +1016,204 @@ app.get("/api/chat/messages/:room_id", authenticateToken, async (req, res) => {
       JOIN admin a ON cm.sender_id = a.id
       WHERE cm.room_id = $1
       ORDER BY cm.created_at ASC;
-    `;
-    const messages = await pool.query(messagesQuery, [room_id]);
-    res.json(messages.rows);
+    `
+    const messages = await pool.query(messagesQuery, [room_id])
+    res.json(messages.rows)
   } catch (error) {
-    console.error(`Error fetching messages: ${error.message}`);
-    res.status(500).json({ error: "Failed to fetch messages" });
+    console.error(`Error fetching messages: ${error.message}`)
+    res.status(500).json({ error: "Failed to fetch messages" })
   }
-});
-// GET direct messages endpoint 
+})
+// GET direct messages endpoint
 // In your backend routes (replace ID-based with phone-based)
 // Get direct messages between two users
-app.get(
-  "/api/chat/direct-messages/:senderPhone/:recipientPhone",
-  authenticateToken,
-  async (req, res) => {
-    const { senderPhone, recipientPhone } = req.params;
+app.get("/api/chat/direct-messages/:senderPhone/:recipientPhone", authenticateToken, async (req, res) => {
+  const { senderPhone, recipientPhone } = req.params
 
-    try {
-      const messagesQuery = `
+  try {
+    const messagesQuery = `
         SELECT dm.*, a.adminname, a.admin_image_link
         FROM direct_messages dm
         JOIN admin a ON dm.sender_phone = a.phone
         WHERE (dm.sender_phone = $1 AND dm.recipient_phone = $2)
            OR (dm.sender_phone = $2 AND dm.recipient_phone = $1)
         ORDER BY dm.created_at ASC;
-      `;
-      const result = await pool.query(messagesQuery, [senderPhone, recipientPhone]);
-      res.json(result.rows);
-    } catch (error) {
-      console.error("Error fetching direct messages:", error.message);
-      res.status(500).json({ error: "Failed to fetch direct messages" });
-    }
+      `
+    const result = await pool.query(messagesQuery, [senderPhone, recipientPhone])
+    res.json(result.rows)
+  } catch (error) {
+    console.error("Error fetching direct messages:", error.message)
+    res.status(500).json({ error: "Failed to fetch direct messages" })
   }
-);
+})
 
 // Send direct message
 // Update direct message handler with validation
 app.post("/api/chat/direct-messages", authenticateToken, async (req, res) => {
-  const { recipient_phone, message } = req.body;
-  const sender_phone = req.user.phone;
+  const { recipient_phone, message } = req.body
+  const sender_phone = req.user.phone
   // Enhanced validation
   if (!recipient_phone?.match(/^(\+\d{1,3})?\d{10}$/)) {
-    return res.status(400).json({ error: "Invalid recipient phone format" });
+    return res.status(400).json({ error: "Invalid recipient phone format" })
   }
 
   if (!message?.trim() || message.length > 500) {
     return res.status(400).json({
-      error: "Message must be between 1-500 characters"
-    });
+      error: "Message must be between 1-500 characters",
+    })
   }
-
 
   try {
     // Check if recipient exists
-    const recipientCheck = await pool.query(
-      "SELECT * FROM admin WHERE phone = $1",
-      [recipient_phone]
-    );
+    const recipientCheck = await pool.query("SELECT * FROM admin WHERE phone = $1", [recipient_phone])
 
     if (recipientCheck.rows.length === 0) {
-      return res.status(404).json({ error: "Recipient not found" });
+      return res.status(404).json({ error: "Recipient not found" })
     }
 
     const insertQuery = `
       INSERT INTO direct_messages (sender_phone, recipient_phone, message)
       VALUES ($1, $2, $3)
       RETURNING *;
-    `;
+    `
 
-    const result = await pool.query(insertQuery, [
-      sender_phone,
-      recipient_phone,
-      message
-    ]);
+    const result = await pool.query(insertQuery, [sender_phone, recipient_phone, message])
 
     // Get sender details for real-time update
-    const senderResult = await pool.query(
-      "SELECT adminname, admin_image_link FROM admin WHERE phone = $1",
-      [sender_phone]
-    );
+    const senderResult = await pool.query("SELECT adminname, admin_image_link FROM admin WHERE phone = $1", [
+      sender_phone,
+    ])
 
     const messageWithDetails = {
       ...result.rows[0],
       adminname: senderResult.rows[0].adminname,
-      admin_image_link: senderResult.rows[0].admin_image_link
-    };
+      admin_image_link: senderResult.rows[0].admin_image_link,
+    }
 
     // Broadcast to both sender and recipient
-    wss.clients.forEach(client => {
-      if (client.readyState === WebSocket.OPEN &&
-        (client.userPhone === sender_phone || client.userPhone === recipient_phone)) {
-        client.send(JSON.stringify({
-          type: 'direct_message',
-          message: messageWithDetails
-        }));
+    wss.clients.forEach((client) => {
+      if (
+        client.readyState === WebSocket.OPEN &&
+        (client.userPhone === sender_phone || client.userPhone === recipient_phone)
+      ) {
+        client.send(
+          JSON.stringify({
+            type: "direct_message",
+            message: messageWithDetails,
+          }),
+        )
       }
-    });
+    })
 
-    res.status(201).json(messageWithDetails);
+    res.status(201).json(messageWithDetails)
   } catch (error) {
-    console.error("Error sending direct message:", error.message);
+    console.error("Error sending direct message:", error.message)
     res.status(500).json({
       error: "Failed to send direct message",
-      details: error.message
-    });
+      details: error.message,
+    })
   }
-});
+})
 
 // Edit group message
 app.put("/api/chat/messages/:id", authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { message } = req.body;
-    const userId = req.user.id;
+    const { id } = req.params
+    const { message } = req.body
+    const userId = req.user.id
 
     const result = await pool.query(
       `UPDATE chat_messages 
        SET message = $1 
        WHERE id = $2 AND sender_id = $3
        RETURNING *`,
-      [message, id, userId]
-    );
+      [message, id, userId],
+    )
 
     if (result.rows.length === 0) {
-      return res.status(403).json({ error: "Not authorized or message not found" });
+      return res.status(403).json({ error: "Not authorized or message not found" })
     }
 
-    res.json(result.rows[0]);
+    res.json(result.rows[0])
   } catch (error) {
-    console.error("Error updating message:", error);
-    res.status(500).json({ error: "Failed to update message" });
+    console.error("Error updating message:", error)
+    res.status(500).json({ error: "Failed to update message" })
   }
-});
+})
 
 // Delete group message
 app.delete("/api/chat/messages/:id", authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
-    const userId = req.user.id;
+    const { id } = req.params
+    const userId = req.user.id
 
     const result = await pool.query(
       `DELETE FROM chat_messages 
        WHERE id = $1 AND sender_id = $2
        RETURNING *`,
-      [id, userId]
-    );
+      [id, userId],
+    )
 
     if (result.rows.length === 0) {
-      return res.status(403).json({ error: "Not authorized or message not found" });
+      return res.status(403).json({ error: "Not authorized or message not found" })
     }
 
-    res.json({ message: "Message deleted successfully" });
+    res.json({ message: "Message deleted successfully" })
   } catch (error) {
-    console.error("Error deleting message:", error);
-    res.status(500).json({ error: "Failed to delete message" });
+    console.error("Error deleting message:", error)
+    res.status(500).json({ error: "Failed to delete message" })
   }
-});
+})
 
 // Edit direct message
 app.put("/api/chat/direct-messages/:id", authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
-    const { message } = req.body;
-    const senderPhone = req.user.phone;
+    const { id } = req.params
+    const { message } = req.body
+    const senderPhone = req.user.phone
 
     const result = await pool.query(
       `UPDATE direct_messages 
        SET message = $1 
        WHERE id = $2 AND sender_phone = $3
        RETURNING *`,
-      [message, id, senderPhone]
-    );
+      [message, id, senderPhone],
+    )
 
     if (result.rows.length === 0) {
-      return res.status(403).json({ error: "Not authorized or message not found" });
+      return res.status(403).json({ error: "Not authorized or message not found" })
     }
 
-    res.json(result.rows[0]);
+    res.json(result.rows[0])
   } catch (error) {
-    console.error("Error updating direct message:", error);
-    res.status(500).json({ error: "Failed to update message" });
+    console.error("Error updating direct message:", error)
+    res.status(500).json({ error: "Failed to update message" })
   }
-});
+})
 
 // Delete direct message
 app.delete("/api/chat/direct-messages/:id", authenticateToken, async (req, res) => {
   try {
-    const { id } = req.params;
-    const senderPhone = req.user.phone;
+    const { id } = req.params
+    const senderPhone = req.user.phone
 
     const result = await pool.query(
       `DELETE FROM direct_messages 
        WHERE id = $1 AND sender_phone = $2
        RETURNING *`,
-      [id, senderPhone]
-    );
+      [id, senderPhone],
+    )
 
     if (result.rows.length === 0) {
-      return res.status(403).json({ error: "Not authorized or message not found" });
+      return res.status(403).json({ error: "Not authorized or message not found" })
     }
 
-    res.json({ message: "Message deleted successfully" });
+    res.json({ message: "Message deleted successfully" })
   } catch (error) {
-    console.error("Error deleting direct message:", error);
-    res.status(500).json({ error: "Failed to delete message" });
+    console.error("Error deleting direct message:", error)
+    res.status(500).json({ error: "Failed to delete message" })
   }
-});
+})
 
 // Route to get all admins approved only (admin access only)
 app.get("/api/admins/approved", authenticateToken, authorizeAdmin, async (req, res) => {
@@ -1233,15 +1229,14 @@ app.get("/api/admins/approved", authenticateToken, authorizeAdmin, async (req, r
       FROM admin 
       WHERE is_approved = TRUE
       ORDER BY createdat DESC;
-    `;
-    const result = await pool.query(adminsQuery);
-    res.json(result.rows);
+    `
+    const result = await pool.query(adminsQuery)
+    res.json(result.rows)
   } catch (error) {
-    console.error(`Error fetching admins: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve admins" });
+    console.error(`Error fetching admins: ${error.message}`)
+    res.status(500).json({ error: "Failed to retrieve admins" })
   }
-});
-
+})
 
 // Route to get all admins (admin access only)
 app.get("/api/admins", authenticateToken, authorizeAdmin, async (req, res) => {
@@ -1256,170 +1251,163 @@ app.get("/api/admins", authenticateToken, authorizeAdmin, async (req, res) => {
         createdat AS "createdAt"
       FROM admin 
       ORDER BY createdat DESC;
-    `;
-    const result = await pool.query(adminsQuery);
-    res.json(result.rows);
+    `
+    const result = await pool.query(adminsQuery)
+    res.json(result.rows)
   } catch (error) {
-    console.error(`Error fetching admins: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve admins" });
+    console.error(`Error fetching admins: ${error.message}`)
+    res.status(500).json({ error: "Failed to retrieve admins" })
   }
-});
+})
 
 // Route to fetch admin's own details after login
 app.get("/api/admin/me", authenticateToken, async (req, res) => {
   try {
-    const { id } = req.user; // The ID is embedded in the token during login
-    const adminQuery = "SELECT * FROM admin WHERE id = $1";
-    const adminResult = await pool.query(adminQuery, [id]);
+    const { id } = req.user // The ID is embedded in the token during login
+    const adminQuery = "SELECT * FROM admin WHERE id = $1"
+    const adminResult = await pool.query(adminQuery, [id])
 
     if (!adminResult.rows.length) {
-      return res.status(404).json({ error: "Admin not found" });
+      return res.status(404).json({ error: "Admin not found" })
     }
 
-    const admin = adminResult.rows[0];
+    const admin = adminResult.rows[0]
     res.json({
       adminname: admin.adminname,
       username: admin.username,
       phone: admin.phone,
       admin_image_link: admin.admin_image_link,
       createdAt: admin.createdAt,
-    });
+    })
   } catch (error) {
-    console.error(`Error fetching admin details: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve admin details" });
+    console.error(`Error fetching admin details: ${error.message}`)
+    res.status(500).json({ error: "Failed to retrieve admin details" })
   }
-});
+})
 
 // Route to update admin details
 app.put(
   "/api/admin/update",
   authenticateToken, // Ensure the user is authenticated
-  [
-    body("adminname"),
-    body("username"),
-    body("phone"),
-    body("admin_image_link"),
-    body("password"),
-  ],
+  [body("adminname"), body("username"), body("phone"), body("admin_image_link"), body("password")],
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
 
-    const { adminname, username, phone, admin_image_link, password } = req.body;
-    const adminId = req.user.id; // Get admin ID from the token
+    const { adminname, username, phone, admin_image_link, password } = req.body
+    const adminId = req.user.id // Get admin ID from the token
 
     try {
       // Check if the username or phone already exists for another admin
       if (username || phone) {
         const existingAdmin = await pool.query(
           "SELECT * FROM admin WHERE (username = $1 OR phone = $2) AND id != $3;",
-          [username, phone, adminId]
-        );
+          [username, phone, adminId],
+        )
 
         if (existingAdmin.rows.length) {
-          return res.status(400).json({ error: "Username or phone already in use by another admin" });
+          return res.status(400).json({ error: "Username or phone already in use by another admin" })
         }
       }
 
       // Prepare fields for update
-      const updates = [];
-      const values = [];
-      let index = 1;
+      const updates = []
+      const values = []
+      let index = 1
 
       if (adminname) {
-        updates.push(`adminname = $${index++}`);
-        values.push(adminname);
+        updates.push(`adminname = $${index++}`)
+        values.push(adminname)
       }
       if (username) {
-        updates.push(`username = $${index++}`);
-        values.push(username);
+        updates.push(`username = $${index++}`)
+        values.push(username)
       }
       if (phone) {
-        updates.push(`phone = $${index++}`);
-        values.push(phone);
+        updates.push(`phone = $${index++}`)
+        values.push(phone)
       }
       if (admin_image_link) {
-        updates.push(`admin_image_link = $${index++}`);
-        values.push(admin_image_link);
+        updates.push(`admin_image_link = $${index++}`)
+        values.push(admin_image_link)
       }
       if (password) {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        updates.push(`password = $${index++}`);
-        values.push(hashedPassword);
+        const hashedPassword = await bcrypt.hash(password, 10)
+        updates.push(`password = $${index++}`)
+        values.push(hashedPassword)
       }
 
       if (updates.length === 0) {
-        return res.status(400).json({ error: "No fields to update" });
+        return res.status(400).json({ error: "No fields to update" })
       }
 
-      values.push(adminId); // Add admin ID as the last parameter
+      values.push(adminId) // Add admin ID as the last parameter
 
       const updateQuery = `
         UPDATE admin
         SET ${updates.join(", ")}
         WHERE id = $${index};
-      `;
+      `
 
-      await pool.query(updateQuery, values);
-      res.json({ message: "Admin details updated successfully" });
+      await pool.query(updateQuery, values)
+      res.json({ message: "Admin details updated successfully" })
     } catch (error) {
-      console.error(`Error updating admin details: ${error.message}`);
-      res.status(500).json({ error: "Failed to update admin details" });
+      console.error(`Error updating admin details: ${error.message}`)
+      res.status(500).json({ error: "Failed to update admin details" })
     }
-  }
-);
-
+  },
+)
 
 // Route to reset password
 app.post("/api/admin/forgot-password", async (req, res) => {
-  const { username, newPassword } = req.body;
+  const { username, newPassword } = req.body
 
   // Validate input
   if (!username || !newPassword) {
-    return res.status(400).json({ error: "Username and new password are required" });
+    return res.status(400).json({ error: "Username and new password are required" })
   }
 
   if (newPassword.length < 6) {
-    return res.status(400).json({ error: "Password must be at least 6 characters long" });
+    return res.status(400).json({ error: "Password must be at least 6 characters long" })
   }
 
   try {
     // Check if the admin exists
-    const adminQuery = `SELECT id FROM admin WHERE username = $1;`;
-    const adminResult = await pool.query(adminQuery, [username]);
+    const adminQuery = `SELECT id FROM admin WHERE username = $1;`
+    const adminResult = await pool.query(adminQuery, [username])
 
     if (!adminResult.rows.length) {
-      return res.status(404).json({ error: "Admin not found" });
+      return res.status(404).json({ error: "Admin not found" })
     }
 
-    const adminId = adminResult.rows[0].id;
+    const adminId = adminResult.rows[0].id
 
     // Hash the new password
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    const hashedPassword = await bcrypt.hash(newPassword, 10)
 
     // Update the password in the database
     const updatePasswordQuery = `
       UPDATE admin 
       SET password = $1 
       WHERE id = $2;
-    `;
-    await pool.query(updatePasswordQuery, [hashedPassword, adminId]);
+    `
+    await pool.query(updatePasswordQuery, [hashedPassword, adminId])
 
-    res.json({ message: "Password reset successfully" });
+    res.json({ message: "Password reset successfully" })
   } catch (error) {
-    console.error(`Error resetting password: ${error.message}`);
-    res.status(500).json({ error: "Failed to reset password" });
+    console.error(`Error resetting password: ${error.message}`)
+    res.status(500).json({ error: "Failed to reset password" })
   }
-});
+})
 
 // Route to get all jobs with pagination
 app.get("/api/jobs", async (req, res) => {
-  const { page = 1, limit = 8 } = req.query;
+  const { page = 1, limit = 8 } = req.query
 
   try {
-    const offset = (page - 1) * parseInt(limit);
-    const currentTime = new Date();
-    const sevenDaysAgo = new Date(currentTime.setDate(currentTime.getDate() - 7));
+    const offset = (page - 1) * Number.parseInt(limit)
+    const currentTime = new Date()
+    const sevenDaysAgo = new Date(currentTime.setDate(currentTime.getDate() - 7))
 
     const getAllJobsQuery = `
       SELECT *, 
@@ -1430,26 +1418,26 @@ app.get("/api/jobs", async (req, res) => {
       FROM job 
       ORDER BY isNew DESC, createdAt DESC 
       LIMIT $2 OFFSET $3;
-    `;
+    `
 
-    const jobs = await pool.query(getAllJobsQuery, [sevenDaysAgo.toISOString(), limit, offset]);
+    const jobs = await pool.query(getAllJobsQuery, [sevenDaysAgo.toISOString(), limit, offset])
 
     if (jobs.rows.length > 0) {
-      res.json(jobs.rows);
+      res.json(jobs.rows)
     } else {
-      res.status(404).json({ error: "No jobs found" });
+      res.status(404).json({ error: "No jobs found" })
     }
   } catch (error) {
-    console.error(`Error fetching all jobs: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve jobs" });
+    console.error(`Error fetching all jobs: ${error.message}`)
+    res.status(500).json({ error: "Failed to retrieve jobs" })
   }
-});
+})
 
 // Admin Panel: Get all jobs (admin access only)
 // Modified GET /api/jobs/adminpanel
 app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
-  const viewAll = req.query.view === 'all';
-  const adminId = req.user.id;
+  const viewAll = req.query.view === "all"
+  const adminId = req.user.id
 
   try {
     let query = `
@@ -1460,56 +1448,52 @@ app.get("/api/jobs/adminpanel", authenticateToken, authorizeAdmin, async (req, r
       FROM job j
       LEFT JOIN admin creator ON j.created_by = creator.id
       LEFT JOIN admin approver ON j.approved_by = approver.id
-    `;
+    `
 
     if (!viewAll) {
-      query += ` WHERE j.created_by = $1`;
+      query += ` WHERE j.created_by = $1`
     }
 
-    const result = await pool.query(query, viewAll ? [] : [adminId]);
-    res.json(result.rows);
+    const result = await pool.query(query, viewAll ? [] : [adminId])
+    res.json(result.rows)
   } catch (error) {
-    console.error("Error retrieving jobs:", error);
-    res.status(500).send("An error occurred while retrieving jobs.");
+    console.error("Error retrieving jobs:", error)
+    res.status(500).send("An error occurred while retrieving jobs.")
   }
-});
+})
 
 // Add these routes after your existing job routes
 
 // Create approval request
 // Modify the DELETE /api/jobs/:id route
 app.delete("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params
 
   try {
     // Delete related approval requests first
-    await pool.query("DELETE FROM job_approval_requests WHERE job_id = $1", [id]);
+    await pool.query("DELETE FROM job_approval_requests WHERE job_id = $1", [id])
 
     // Delete related viewers
-    await pool.query("DELETE FROM job_viewers WHERE job_id = $1", [id]);
+    await pool.query("DELETE FROM job_viewers WHERE job_id = $1", [id])
 
     // Then delete the job
-    const result = await pool.query("DELETE FROM job WHERE id = $1 RETURNING *", [id]);
+    const result = await pool.query("DELETE FROM job WHERE id = $1 RETURNING *", [id])
 
     if (result.rows.length === 0) {
-      return res.status(404).json({ error: "Job not found" });
+      return res.status(404).json({ error: "Job not found" })
     }
 
-    res.json({ message: "Job deleted successfully" });
+    res.json({ message: "Job deleted successfully" })
   } catch (error) {
-    console.error(`Error deleting job: ${error.message}`);
-    res.status(500).json({ error: "Failed to delete job" });
+    console.error(`Error deleting job: ${error.message}`)
+    res.status(500).json({ error: "Failed to delete job" })
   }
-});
+})
 
 const isFirstAdmin = async (adminId) => {
-  const result = await pool.query(
-    "SELECT created_by, is_approved FROM admin WHERE id = $1",
-    [adminId]
-  );
-  return result.rows[0].created_by === null && result.rows[0].is_approved;
-};
-
+  const result = await pool.query("SELECT created_by, is_approved FROM admin WHERE id = $1", [adminId])
+  return result.rows[0].created_by === null && result.rows[0].is_approved
+}
 
 // Route to add a new job (admin access only, with validation)
 app.post(
@@ -1530,99 +1514,179 @@ app.post(
     body("batch").notEmpty(),
   ],
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
 
-    const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch } = req.body;
-    const adminId = req.user.id; // Get admin ID from the token
+    // Replace this in the route:
+    // const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch } = req.body;
+    const {
+      companyname,
+      title,
+      description,
+      apply_link,
+      image_link,
+      url,
+      salary,
+      location,
+      job_type,
+      experience,
+      batch,
+      advanced_data,
+    } = req.body
+    const adminId = req.user.id // Get admin ID from the token
 
     try {
       // Fetch admin's full name from the database
-      const adminQuery = `SELECT adminname FROM admin WHERE id = $1`;
-      const adminResult = await pool.query(adminQuery, [adminId]);
+      const adminQuery = `SELECT adminname FROM admin WHERE id = $1`
+      const adminResult = await pool.query(adminQuery, [adminId])
 
       if (adminResult.rows.length === 0) {
-        return res.status(404).json({ error: "Admin not found" });
+        return res.status(404).json({ error: "Admin not found" })
       }
 
-      const adminName = adminResult.rows[0].adminname; // Get admin's full name
+      const adminName = adminResult.rows[0].adminname // Get admin's full name
 
+      // Replace this query:
+      // const insertJobQuery = `
+      //   INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader, created_by)
+      //   VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
+      // `;
+
+      // await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, adminName, adminId]);
+
+      // With this:
       const insertJobQuery = `
-        INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader, created_by)
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13);
-      `;
+        INSERT INTO job (companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, job_uploader, created_by, advanced_data)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
+      `
 
-      await pool.query(insertJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, adminName, adminId]);
+      await pool.query(insertJobQuery, [
+        companyname,
+        title,
+        description,
+        apply_link,
+        image_link,
+        url,
+        salary,
+        location,
+        job_type,
+        experience,
+        batch,
+        adminName,
+        adminId,
+        advanced_data || null,
+      ])
 
-      res.status(201).json({ message: "Job added successfully" });
+      res.status(201).json({ message: "Job added successfully" })
     } catch (error) {
-      console.error(`Error adding job: ${error.message}`);
-      res.status(500).json({ error: "Failed to add job" });
+      console.error(`Error adding job: ${error.message}`)
+      res.status(500).json({ error: "Failed to add job" })
     }
-  }
-);
-
+  },
+)
 
 //jobs Modify Approval
 app.put("/api/jobs/:id/approve", authenticateToken, authorizeAdmin, async (req, res) => {
-  const jobId = req.params.id;
-  const approverId = req.user.id;
+  const jobId = req.params.id
+  const approverId = req.user.id
 
-  await pool.query(`
+  await pool.query(
+    `
     UPDATE job SET 
       status = 'approved',
       approved_by = $1
     WHERE id = $2
-  `, [approverId, jobId]);
-});
+  `,
+    [approverId, jobId],
+  )
+})
 
 // Route to update a job (admin access only)
 app.put("/api/jobs/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch } = req.body;
+  const { id } = req.params
+  // Replace this in the route:
+  // const { companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch } = req.body;
+  const {
+    companyname,
+    title,
+    description,
+    apply_link,
+    image_link,
+    url,
+    salary,
+    location,
+    job_type,
+    experience,
+    batch,
+    advanced_data,
+  } = req.body
 
   try {
-    const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id]);
+    const existingJob = await pool.query("SELECT * FROM job WHERE id = $1;", [id])
 
     if (!existingJob.rows.length) {
-      return res.status(404).json({ error: "Job not found" });
+      return res.status(404).json({ error: "Job not found" })
     }
 
-    const job = existingJob.rows[0];
-    const adminIsFirst = await isFirstAdmin(req.user.id);
+    const job = existingJob.rows[0]
+    const adminIsFirst = await isFirstAdmin(req.user.id)
 
     if (!adminIsFirst && job.created_by !== req.user.id) {
-      return res.status(403).json({ error: "Not authorized" });
+      return res.status(403).json({ error: "Not authorized" })
     }
 
     // Fetch admin details to get adminname
-    const adminId = req.user.id; // Get admin ID from the token
-    const adminQuery = "SELECT adminname FROM admin WHERE id = $1;";
-    const adminResult = await pool.query(adminQuery, [adminId]);
-    const admin = adminResult.rows[0];
+    const adminId = req.user.id // Get admin ID from the token
+    const adminQuery = "SELECT adminname FROM admin WHERE id = $1;"
+    const adminResult = await pool.query(adminQuery, [adminId])
+    const admin = adminResult.rows[0]
 
     if (!admin) {
-      return res.status(404).json({ error: "Admin not found" });
+      return res.status(404).json({ error: "Admin not found" })
     }
 
-    const jobUploader = admin.adminname; // Use adminname as job uploader
+    const jobUploader = admin.adminname // Use adminname as job uploader
 
+    // Replace this query:
+    // const updateJobQuery = `
+    //   UPDATE job
+    //   SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
+    //   WHERE id = $13;
+    // `;
+    // await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader, id]);
+
+    // With this:
     const updateJobQuery = `
       UPDATE job
-      SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12
-      WHERE id = $13;
-    `;
-    await pool.query(updateJobQuery, [companyname, title, description, apply_link, image_link, url, salary, location, job_type, experience, batch, jobUploader, id]);
-    res.json({ message: "Job updated successfully" });
+      SET companyname = $1, title = $2, description = $3, apply_link = $4, image_link = $5, url = $6, salary = $7, location = $8, job_type = $9, experience = $10, batch = $11, job_uploader = $12, advanced_data = $13
+      WHERE id = $14;
+    `
+    await pool.query(updateJobQuery, [
+      companyname,
+      title,
+      description,
+      apply_link,
+      image_link,
+      url,
+      salary,
+      location,
+      job_type,
+      experience,
+      batch,
+      jobUploader,
+      advanced_data || null,
+      id,
+    ])
+    res.json({ message: "Job updated successfully" })
   } catch (error) {
-    console.error(`Error updating job: ${error.message}`);
-    res.status(500).json({ error: "Failed to update job" });
+    console.error(`Error updating job: ${error.message}`)
+    res.status(500).json({ error: "Failed to update job" })
   }
-});
+})
 
 // Fetch job by company name and job URL
-app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
-  const { companyname, url } = req.params;
+app.get("/api/jobs/company/:companyname/:url", async (req, res) => {
+  const { companyname, url } = req.params
 
   const getJobByCompanyNameQuery = `
     SELECT j.*, 
@@ -1631,27 +1695,25 @@ app.get('/api/jobs/company/:companyname/:url', async (req, res) => {
     WHERE 
       regexp_replace(LOWER(j.companyname), '[^a-z0-9]', '', 'g') = regexp_replace(LOWER($1), '[^a-z0-9]', '', 'g')
       AND LOWER(j.url) = LOWER($2);
-  `;
+  `
 
   try {
-    const job = await pool.query(getJobByCompanyNameQuery, [companyname, url]);
+    const job = await pool.query(getJobByCompanyNameQuery, [companyname, url])
 
     if (job.rows.length) {
-      res.json(job.rows[0]);
+      res.json(job.rows[0])
     } else {
-      res.status(404).json({ error: "Job not found" });
+      res.status(404).json({ error: "Job not found" })
     }
   } catch (error) {
-    console.error(`Error fetching job by company name and URL: ${error.message}`);
-    res.status(500).json({ error: "Failed to fetch job" });
+    console.error(`Error fetching job by company name and URL: ${error.message}`)
+    res.status(500).json({ error: "Failed to fetch job" })
   }
-});
-
-
+})
 
 app.post("/api/jobs/:id/view", async (req, res) => {
-  const { id } = req.params;
-  const ipAddress = getClientIp(req);
+  const { id } = req.params
+  const ipAddress = getClientIp(req)
 
   try {
     const query = `
@@ -1659,60 +1721,61 @@ app.post("/api/jobs/:id/view", async (req, res) => {
           VALUES ($1, $2, CURRENT_TIMESTAMP)
           ON CONFLICT (job_id, ip_address)
           DO UPDATE SET viewed_at = CURRENT_TIMESTAMP;
-      `;
-    await pool.query(query, [id, ipAddress]);
-    res.status(200).json({ message: "View recorded successfully" });
+      `
+    await pool.query(query, [id, ipAddress])
+    res.status(200).json({ message: "View recorded successfully" })
   } catch (error) {
-    console.error(`Error recording job view: ${error.message}`);
-    res.status(500).json({ error: "Failed to record view" });
+    console.error(`Error recording job view: ${error.message}`)
+    res.status(500).json({ error: "Failed to record view" })
   }
-});
+})
 
 app.get("/api/jobs/:id/viewers", async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params
 
   try {
     const query = `
           SELECT COUNT(DISTINCT ip_address) AS viewer_count
           FROM job_viewers
           WHERE job_id = $1;
-      `;
-    const result = await pool.query(query, [id]);
-    res.json({ viewer_count: result.rows[0].viewer_count });
+      `
+    const result = await pool.query(query, [id])
+    res.json({ viewer_count: result.rows[0].viewer_count })
   } catch (error) {
-    console.error(`Error fetching viewers count: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve viewer count" });
+    console.error(`Error fetching viewers count: ${error.message}`)
+    res.status(500).json({ error: "Failed to retrieve viewer count" })
   }
-});
+})
 // Fetch the latest popup content
 app.get("/api/popup", async (req, res) => {
   try {
-    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;");
-    const popup = popupResult.rows[0];
+    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC LIMIT 1;")
+    const popup = popupResult.rows[0]
     if (popup) {
-      res.json({ popup });
+      res.json({ popup })
     } else {
-      res.json({ popup: null });
+      res.json({ popup: null })
     }
   } catch (error) {
-    console.error(`Error fetching popup content: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve popup content" });
+    console.error(`Error fetching popup content: ${error.message}`)
+    res.status(500).json({ error: "Failed to retrieve popup content" })
   }
-});
+})
 // Admin Panel: Get all popup content
 app.get("/api/popup/adminpanel", authenticateToken, authorizeAdmin, async (req, res) => {
   try {
-    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC;");
-    res.json(popupResult.rows);
+    const popupResult = await pool.query("SELECT * FROM popup_content ORDER BY created_at DESC;")
+    res.json(popupResult.rows)
   } catch (error) {
-    console.error(`Error fetching all popup content: ${error.message}`);
-    res.status(500).json({ error: "Failed to retrieve popup content" });
+    console.error(`Error fetching all popup content: ${error.message}`)
+    res.status(500).json({ error: "Failed to retrieve popup content" })
   }
-});
+})
 
 app.post(
   "/api/popup/adminpanel",
-  authenticateToken, authorizeAdmin,
+  authenticateToken,
+  authorizeAdmin,
   [
     body("popup_heading").notEmpty(),
     body("popup_text").notEmpty(),
@@ -1721,32 +1784,32 @@ app.post(
     body("popup_belowtext").notEmpty(),
   ],
   async (req, res) => {
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() });
-    const { popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext } = req.body;
+    const errors = validationResult(req)
+    if (!errors.isEmpty()) return res.status(400).json({ errors: errors.array() })
+    const { popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext } = req.body
     try {
       const insertPopQuery = `
       INSERT INTO popup_content (popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link)
       VALUES ($1, $2, $3, $4, $5);
-    `; await pool.query(insertPopQuery, [popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link]);
-      res.status(201).json({ message: "Pop added successfully" });
+    `
+      await pool.query(insertPopQuery, [popup_heading, popup_text, popup_link, popup_belowtext, popup_routing_link])
+      res.status(201).json({ message: "Pop added successfully" })
     } catch (error) {
-      console.error(`Error adding Pop: ${error.message}`);
-      res.status(500).json({ error: "Failed to add Pop" });
+      console.error(`Error adding Pop: ${error.message}`)
+      res.status(500).json({ error: "Failed to add Pop" })
     }
-
-  }
+  },
 )
 // Admin Panel: Update specific popup content
 app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
-  const { popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext } = req.body;
+  const { id } = req.params
+  const { popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext } = req.body
 
   try {
-    const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id]);
+    const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id])
 
     if (!existingPopup.rows.length) {
-      return res.status(404).json({ error: "Popup not found" });
+      return res.status(404).json({ error: "Popup not found" })
     }
 
     const updatePopupQuery = `
@@ -1757,77 +1820,75 @@ app.put("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (r
           popup_routing_link = $4,
           popup_belowtext = $5
       WHERE id = $6;
-    `;
-    await pool.query(updatePopupQuery, [popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext, id]);
-    res.json({ message: "Popup content updated successfully" });
+    `
+    await pool.query(updatePopupQuery, [popup_heading, popup_text, popup_link, popup_routing_link, popup_belowtext, id])
+    res.json({ message: "Popup content updated successfully" })
   } catch (error) {
-    console.error(`Error updating popup content: ${error.message}`);
-    res.status(500).json({ error: "Failed to update popup content" });
+    console.error(`Error updating popup content: ${error.message}`)
+    res.status(500).json({ error: "Failed to update popup content" })
   }
-});
+})
 
 // Admin Panel: Delete specific popup content by ID
 app.delete("/api/popup/adminpanel/:id", authenticateToken, authorizeAdmin, async (req, res) => {
-  const { id } = req.params;
+  const { id } = req.params
 
   try {
-    const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id]);
+    const existingPopup = await pool.query("SELECT * FROM popup_content WHERE id = $1;", [id])
 
     if (!existingPopup.rows.length) {
-      return res.status(404).json({ error: "Popup not found" });
+      return res.status(404).json({ error: "Popup not found" })
     }
 
-    const deletePopupQuery = `DELETE FROM popup_content WHERE id = $1;`;
-    await pool.query(deletePopupQuery, [id]);
-    res.json({ message: "Popup content deleted successfully" });
+    const deletePopupQuery = `DELETE FROM popup_content WHERE id = $1;`
+    await pool.query(deletePopupQuery, [id])
+    res.json({ message: "Popup content deleted successfully" })
   } catch (error) {
-    console.error(`Error deleting popup content: ${error.message}`);
-    res.status(500).json({ error: "Failed to delete popup content" });
+    console.error(`Error deleting popup content: ${error.message}`)
+    res.status(500).json({ error: "Failed to delete popup content" })
   }
-});
+})
 app.use((req, res, next) => {
-  res.set('Cache-Control', 'no-store');
-  next();
-});
+  res.set("Cache-Control", "no-store")
+  next()
+})
 
-pool.connect()
-  .then(() => console.log('Connected to PostgreSQL database'))
-  .catch((err) => console.error('Database connection error:', err.stack));
+pool
+  .connect()
+  .then(() => console.log("Connected to PostgreSQL database"))
+  .catch((err) => console.error("Database connection error:", err.stack))
 
 // Root route
 app.get("/", (req, res) => {
-  res.send("Welcome to the Job Card Details API!");
-});
+  res.send("Welcome to the Job Card Details API!")
+})
 
 // Middleware for error handling
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({ error: "Something went wrong!" });
-});
-
-
+  console.error(err.stack)
+  res.status(500).json({ error: "Something went wrong!" })
+})
 
 // Configure storage for resumes
-const storage = multer.memoryStorage();
+const storage = multer.memoryStorage()
 const upload = multer({
   storage: storage,
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
   fileFilter: (req, file, cb) => {
-    if (file.mimetype === 'application/pdf' ||
-      file.mimetype === 'application/msword' ||
-      file.mimetype === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document') {
-      cb(null, true);
+    if (
+      file.mimetype === "application/pdf" ||
+      file.mimetype === "application/msword" ||
+      file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      cb(null, true)
     } else {
-      cb(new Error('Invalid file type'), false);
+      cb(new Error("Invalid file type"), false)
     }
-  }
-});
-
-
-
+  },
+})
 
 // Get Resumes Public Endpoint
-app.get('/api/public/resumes', async (req, res) => {
+app.get("/api/public/resumes", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT r.*, 
@@ -1837,30 +1898,30 @@ app.get('/api/public/resumes', async (req, res) => {
       FROM resumes r
       JOIN job j ON r.job_id = j.id
       ORDER BY uploaded_at DESC
-    `);
-    res.json(result.rows);
+    `)
+    res.json(result.rows)
   } catch (error) {
-    console.error('Error fetching resumes:', error);
-    res.status(500).json({ error: 'Failed to fetch resumes' });
+    console.error("Error fetching resumes:", error)
+    res.status(500).json({ error: "Failed to fetch resumes" })
   }
-});
+})
 // Download Resume Endpoint
-app.get('/api/resumes/:id/download', async (req, res) => {
+app.get("/api/resumes/:id/download", async (req, res) => {
   try {
-    const result = await pool.query('SELECT * FROM resumes WHERE id = $1', [req.params.id]);
-    if (!result.rows.length) return res.status(404).send('Resume not found');
+    const result = await pool.query("SELECT * FROM resumes WHERE id = $1", [req.params.id])
+    if (!result.rows.length) return res.status(404).send("Resume not found")
 
-    const resume = result.rows[0];
+    const resume = result.rows[0]
     res.set({
-      'Content-Type': resume.file_type,
-      'Content-Disposition': `attachment; filename="${resume.name}_resume.${resume.file_type.split('/')[1]}"`
-    });
-    res.send(resume.resume_file);
+      "Content-Type": resume.file_type,
+      "Content-Disposition": `attachment; filename="${resume.name}_resume.${resume.file_type.split("/")[1]}"`,
+    })
+    res.send(resume.resume_file)
   } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).send('Download failed');
+    console.error("Download error:", error)
+    res.status(500).send("Download failed")
   }
-});
+})
 
 // Enhanced resume analysis function
 function analyzeResume(resumeText, jobDescription) {
@@ -1900,7 +1961,8 @@ function extractRequirements(description) {
     .map((line) => line.trim())
     .filter((line) => line.length > 0)
 
-  // Filter for likely requirement lines (containing keywords like "experience", "knowledge", "skill", etc.)
+  // Filter for likely requirement lines (containing keywords like "experience", "knowledge", "skill", "proficiency", "ability", "familiar", "understand"]
+
   const requirementKeywords = ["experience", "knowledge", "skill", "proficiency", "ability", "familiar", "understand"]
 
   const requirements = lines.filter(
@@ -2203,23 +2265,20 @@ app.post("/api/jobs/:id/upload-resume", upload.single("resume"), async (req, res
   }
 })
 
-
 // Enhanced Resume Analysis Function for Multiple Jobs
 const analyzeResumeForAllJobs = (resumeText, jobs) => {
   // Extract skills and experience from resume once
-  const skills = extractSkills(resumeText);
-  const experience = extractExperience(resumeText);
-  
+  const skills = extractSkills(resumeText)
+  const experience = extractExperience(resumeText)
+
   // Analyze against each job
-  const jobAnalyses = jobs.map(job => {
-    const requirements = extractRequirements(job.description);
-    const matchedRequirements = requirements.filter(req =>
-      skills.some(skill => req.toLowerCase().includes(skill.toLowerCase()))
-    );
-    
-    const matchPercentage = requirements.length > 0 
-      ? (matchedRequirements.length / requirements.length) * 100
-      : 50;
+  const jobAnalyses = jobs.map((job) => {
+    const requirements = extractRequirements(job.description)
+    const matchedRequirements = requirements.filter((req) =>
+      skills.some((skill) => req.toLowerCase().includes(skill.toLowerCase())),
+    )
+
+    const matchPercentage = requirements.length > 0 ? (matchedRequirements.length / requirements.length) * 100 : 50
 
     return {
       jobId: job.id,
@@ -2228,51 +2287,49 @@ const analyzeResumeForAllJobs = (resumeText, jobs) => {
       matchPercentage,
       requirements: {
         total: requirements.length,
-        matched: matchedRequirements.length
-      }
-    };
-  });
+        matched: matchedRequirements.length,
+      },
+    }
+  })
 
   // Calculate overall statistics
-  const totalMatch = jobAnalyses.reduce((sum, analysis) => sum + analysis.matchPercentage, 0);
-  const averageMatch = totalMatch / jobAnalyses.length;
-  
+  const totalMatch = jobAnalyses.reduce((sum, analysis) => sum + analysis.matchPercentage, 0)
+  const averageMatch = totalMatch / jobAnalyses.length
+
   // Get top 3 matches
-  const topMatches = [...jobAnalyses]
-    .sort((a, b) => b.matchPercentage - a.matchPercentage)
-    .slice(0, 3);
+  const topMatches = [...jobAnalyses].sort((a, b) => b.matchPercentage - a.matchPercentage).slice(0, 3)
 
   return {
     averageMatch,
     topMatches,
     skills,
     experience,
-    totalJobsAnalyzed: jobs.length
-  };
-};
+    totalJobsAnalyzed: jobs.length,
+  }
+}
 
 // Enhanced Resume Analysis Endpoint
 // Store analyzed resume in database (add to existing /api/analyze-resume route)
-app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
+app.post("/api/analyze-resume", upload.single("resume"), async (req, res) => {
   try {
-    const file = req.file;
-    const { name, email, phone } = req.body; // Get user details from request
+    const file = req.file
+    const { name, email, phone } = req.body // Get user details from request
 
-    if (!file) return res.status(400).json({ error: 'No file uploaded' });
-    if (!name || !email) return res.status(400).json({ error: 'Name and email are required' });
+    if (!file) return res.status(400).json({ error: "No file uploaded" })
+    if (!name || !email) return res.status(400).json({ error: "Name and email are required" })
 
     // Existing analysis logic
-    let text = '';
-    if (file.mimetype === 'application/pdf') {
-      const pdfData = await pdfParse(file.buffer);
-      text = pdfData.text;
+    let text = ""
+    if (file.mimetype === "application/pdf") {
+      const pdfData = await pdfParse(file.buffer)
+      text = pdfData.text
     } else {
-      const result = await mammoth.extractRawText({ buffer: file.buffer });
-      text = result.value;
+      const result = await mammoth.extractRawText({ buffer: file.buffer })
+      text = result.value
     }
 
-    const { rows: jobs } = await pool.query('SELECT id, companyname, title, description FROM job');
-    const analysisResult = analyzeResumeForAllJobs(text, jobs);
+    const { rows: jobs } = await pool.query("SELECT id, companyname, title, description FROM job")
+    const analysisResult = analyzeResumeForAllJobs(text, jobs)
 
     // Store in database with NULL job_id
     await pool.query(
@@ -2286,9 +2343,9 @@ app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
         file.mimetype,
         analysisResult.skills,
         analysisResult.experience,
-        analysisResult.averageMatch
-      ]
-    );
+        analysisResult.averageMatch,
+      ],
+    )
 
     res.json({
       success: true,
@@ -2297,21 +2354,20 @@ app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
       skills: analysisResult.skills,
       experience: analysisResult.experience,
       topMatches: analysisResult.topMatches,
-      totalJobsAnalyzed: analysisResult.totalJobsAnalyzed
-    });
-
+      totalJobsAnalyzed: analysisResult.totalJobsAnalyzed,
+    })
   } catch (error) {
-    console.error('Resume analysis error:', error);
-    res.status(500).json({ 
+    console.error("Resume analysis error:", error)
+    res.status(500).json({
       success: false,
-      error: 'Failed to analyze resume',
-      details: error.message
-    });
+      error: "Failed to analyze resume",
+      details: error.message,
+    })
   }
-});
+})
 
 // Get all analyzed resumes (general analysis)
-app.get('/api/analyzed-resumes', async (req, res) => {
+app.get("/api/analyzed-resumes", async (req, res) => {
   try {
     const result = await pool.query(`
       SELECT id, name, email, phone, skills, experience, 
@@ -2319,48 +2375,45 @@ app.get('/api/analyzed-resumes', async (req, res) => {
       FROM resumes
       WHERE job_id IS NULL
       ORDER BY uploaded_at DESC
-    `);
-    res.json(result.rows);
+    `)
+    res.json(result.rows)
   } catch (error) {
-    console.error('Error fetching analyzed resumes:', error);
-    res.status(500).json({ error: 'Failed to fetch resumes' });
+    console.error("Error fetching analyzed resumes:", error)
+    res.status(500).json({ error: "Failed to fetch resumes" })
   }
-});
+})
 
 // Download analyzed resume
-app.get('/api/analyzed-resumes/:id/download', async (req, res) => {
+app.get("/api/analyzed-resumes/:id/download", async (req, res) => {
   try {
-    const result = await pool.query(
-      'SELECT * FROM resumes WHERE id = $1 AND job_id IS NULL',
-      [req.params.id]
-    );
-    
-    if (!result.rows.length) return res.status(404).send('Resume not found');
+    const result = await pool.query("SELECT * FROM resumes WHERE id = $1 AND job_id IS NULL", [req.params.id])
 
-    const resume = result.rows[0];
+    if (!result.rows.length) return res.status(404).send("Resume not found")
+
+    const resume = result.rows[0]
     res.set({
-      'Content-Type': resume.file_type,
-      'Content-Disposition': `attachment; filename="${resume.name}_resume.${resume.file_type.split('/')[1]}"`
-    });
-    res.send(resume.resume_file);
+      "Content-Type": resume.file_type,
+      "Content-Disposition": `attachment; filename="${resume.name}_resume.${resume.file_type.split("/")[1]}"`,
+    })
+    res.send(resume.resume_file)
   } catch (error) {
-    console.error('Download error:', error);
-    res.status(500).send('Download failed');
+    console.error("Download error:", error)
+    res.status(500).send("Download failed")
   }
-});
+})
 // Enhanced AI Career Chatbot Endpoint
-app.post('/api/chatbot', async (req, res) => {
+app.post("/api/chatbot", async (req, res) => {
   try {
-    const { message } = req.body;
-    if (!message || typeof message !== 'string' || message.trim().length === 0) {
-      return res.status(400).json({ error: 'Invalid message content' });
+    const { message } = req.body
+    if (!message || typeof message !== "string" || message.trim().length === 0) {
+      return res.status(400).json({ error: "Invalid message content" })
     }
 
     const completion = await openai.chat.completions.create({
-      model: 'gpt-3.5-turbo',
+      model: "gpt-3.5-turbo",
       messages: [
         {
-          role: 'system',
+          role: "system",
           content: `You are CareerGPT, an AI career assistant specializing in:
           - Job search strategies
           - Resume optimization tips
@@ -2369,104 +2422,145 @@ app.post('/api/chatbot', async (req, res) => {
           - Salary negotiation advice
           - Tech industry insights
           Provide concise, actionable advice. Format responses with clear headings,
-          bullet points when listing items, and emojis for visual organization.`
+          bullet points when listing items, and emojis for visual organization.`,
         },
-        { 
-          role: 'user', 
-          content: message.trim() 
-        }
+        {
+          role: "user",
+          content: message.trim(),
+        },
       ],
       max_tokens: 500,
-      temperature: 0.7
-    });
+      temperature: 0.7,
+    })
 
-    const response = completion.choices[0].message.content;
-    
+    const response = completion.choices[0].message.content
+
     // Store conversation in database (optional)
-    await pool.query(
-      'INSERT INTO chat_history (query, response) VALUES ($1, $2)',
-      [message, response]
-    );
+    await pool.query("INSERT INTO chat_history (query, response) VALUES ($1, $2)", [message, response])
 
     res.json({
       success: true,
-      reply: response
-    });
+      reply: response,
+    })
   } catch (error) {
-    console.error('Chat error:', error);
+    console.error("Chat error:", error)
     res.status(500).json({
       success: false,
-      error: 'Failed to process message',
-      system: 'Our career assistant is currently unavailable. Please try again later.'
-    });
+      error: "Failed to process message",
+      system: "Our career assistant is currently unavailable. Please try again later.",
+    })
   }
-});
-
-
-// Google OAuth routes
-app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }))
-
-
-// Google OAuth callback route
-app.get("/api/auth/google/callback", passport.authenticate("google", { session: false }), (req, res) => {
-  // Create JWT token
-  const token = jwt.sign(
-    {
-      id: req.user.id,
-      googleId: req.user.google_id,
-      displayName: req.user.display_name,
-      email: req.user.email,
-      photoURL: req.user.photo_url,
-    },
-    JWT_SECRET,
-    { expiresIn: "7d" },
-  )
-
-  // Get the nonce from res.locals
-  const nonce = res.locals.nonce || ""
-
-  // Send token and user data to client via postMessage with nonce
-  res.send(`
-      <html>
-        <body>
-          <script nonce="${nonce}">
-            window.opener.postMessage(
-              { 
-                token: "${token}", 
-                user: {
-                  id: "${req.user.id}",
-                  googleId: "${req.user.google_id}",
-                  displayName: "${req.user.display_name}",
-                  email: "${req.user.email}",
-                  photoURL: "${req.user.photo_url}"
-                }
-              }, 
-              "${process.env.FRONTEND_URL || "*"}"
-            );
-            window.close();
-          </script>
-        </body>
-      </html>
-    `)
 })
 
-// Get current user
-app.get("/api/auth/me", authenticateToken, async (req, res) => {
-  try {
-    const user = await pool.query("SELECT id, google_id, display_name, email, photo_url FROM users WHERE id = $1", [
-      req.user.id,
-    ])
+// Replace Google OAuth with Appwrite
+// First, add the required Appwrite dependencies at the top of the file
+// const { Client, Account, ID } = require('appwrite');
 
-    if (!user.rows.length) {
-      return res.status(404).json({ error: "User not found" })
-    }
+// Initialize Appwrite client
+// const appwriteClient = new Client()
+//   .setEndpoint(process.env.APPWRITE_ENDPOINT || 'https://cloud.appwrite.io/v1')
+//   .setProject(process.env.APPWRITE_PROJECT_ID || '');
+
+// Initialize Appwrite account
+// const appwriteAccount = new Account(appwriteClient);
+
+// Replace the Google OAuth routes with Appwrite routes
+// Remove these routes:
+// app.get("/api/auth/google", passport.authenticate("google", { scope: ["profile", "email"] }))
+// app.get("/api/auth/google/callback", passport.authenticate("google", { session: false }), (req, res) => {...})
+
+// Add new Appwrite authentication routes
+app.post("/api/auth/appwrite/login", async (req, res) => {
+  try {
+    const { email, password } = req.body
+
+    // Create a session with Appwrite
+    const session = await appwriteAccount.createEmailSession(email, password)
+
+    // Get the user
+    const user = await appwriteAccount.get()
+
+    // Create JWT token
+    const token = jwt.sign(
+      {
+        id: user.$id,
+        email: user.email,
+        name: user.name,
+        photoURL: user.prefs?.photoURL || null,
+      },
+      JWT_SECRET,
+      { expiresIn: "7d" },
+    )
 
     res.json({
-      id: user.rows[0].id,
-      googleId: user.rows[0].google_id,
-      displayName: user.rows[0].display_name,
-      email: user.rows[0].email,
-      photoURL: user.rows[0].photo_url,
+      token,
+      user: {
+        id: user.$id,
+        email: user.email,
+        displayName: user.name,
+        photoURL: user.prefs?.photoURL || null,
+      },
+    })
+  } catch (error) {
+    console.error("Appwrite login error:", error)
+    res.status(401).json({ error: "Authentication failed" })
+  }
+})
+
+app.post("/api/auth/appwrite/register", async (req, res) => {
+  try {
+    const { email, password, name } = req.body
+
+    // Create user in Appwrite
+    const user = await appwriteAccount.create(ID.unique(), email, password, name)
+
+    // Create session
+    const session = await appwriteAccount.createEmailSession(email, password)
+
+    // Create JWT token
+    const token = jwt.sign(
+      {
+        id: user.$id,
+        email: user.email,
+        name: user.name,
+      },
+      JWT_SECRET,
+      { expiresIn: "7d" },
+    )
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user.$id,
+        email: user.email,
+        displayName: user.name,
+      },
+    })
+  } catch (error) {
+    console.error("Appwrite registration error:", error)
+    res.status(400).json({ error: "Registration failed" })
+  }
+})
+
+app.post("/api/auth/appwrite/logout", async (req, res) => {
+  try {
+    await appwriteAccount.deleteSession("current")
+    res.json({ message: "Logged out successfully" })
+  } catch (error) {
+    console.error("Appwrite logout error:", error)
+    res.status(500).json({ error: "Logout failed" })
+  }
+})
+
+// Update the /api/auth/me endpoint to work with Appwrite
+app.get("/api/auth/me", authenticateToken, async (req, res) => {
+  try {
+    // The user data is already in the token, so we can just return it
+    res.json({
+      id: req.user.id,
+      email: req.user.email,
+      displayName: req.user.name,
+      photoURL: req.user.photoURL,
     })
   } catch (error) {
     console.error("Error fetching user:", error)
@@ -2481,9 +2575,9 @@ app.post("/api/auth/logout", (req, res) => {
 
 // Generate nonce for CSP
 app.use((req, res, next) => {
-  res.locals.nonce = crypto.randomBytes(16).toString("hex");
-  next();
-});
+  res.locals.nonce = crypto.randomBytes(16).toString("hex")
+  next()
+})
 
 // Configure Helmet with security headers
 app.use(
@@ -2497,19 +2591,13 @@ app.use(
         ],
         styleSrc: ["'self'", "'unsafe-inline'"],
         imgSrc: ["'self'", "data:", "https:"],
-        connectSrc: [
-          "'self'",
-          "https://backend-lt9m.onrender.com",
-          "https://www.googleapis.com",
-        ],
+        connectSrc: ["'self'", "https://backend-lt9m.onrender.com", "https://www.googleapis.com"],
       },
     },
-  })
-);
-
-
+  }),
+)
 
 module.exports = { generateNonce }
 
 // Connect to the database and start the server
-initializeDbAndServer();
+initializeDbAndServer()
