@@ -2835,3 +2835,5 @@ app.put('/:id/edit', async (req, res) => {
 });
 
 module.exports = app;
+
+initializeDbAndServer()
