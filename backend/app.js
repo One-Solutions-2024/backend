@@ -2592,5 +2592,246 @@ app.use(
 
 module.exports = { generateNonce }
 
-// Connect to the database and start the server
-initializeDbAndServer();
+
+// Increment job view count
+app.post('/:id/view', async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      'SELECT viewer_count FROM jobs WHERE id = $1',
+      [id]
+    );
+    if (!rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    const count = (rows[0].viewer_count || 0) + 1;
+    const { rows: updated } = await client.query(
+      `UPDATE jobs
+       SET viewer_count = $1, updated_at = NOW()
+       WHERE id = $2
+       RETURNING id, viewer_count`,
+      [count, id]
+    );
+    await client.query('COMMIT');
+    res.json({ success: true, message: 'Job view count incremented', data: updated[0] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error incrementing job view count:', err);
+    res.status(500).json({ error: 'Failed to increment job view count', details: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Update resume status
+app.put('/:id/resumes/status', async (req, res) => {
+  const { id } = req.params;
+  const { resumeId, status } = req.body;
+  const valid = ['pending', 'reviewed', 'shortlisted', 'rejected', 'hired'];
+  if (!resumeId || !status) {
+    return res.status(400).json({ error: 'Resume ID and status are required' });
+  }
+  if (!valid.includes(status)) {
+    return res
+      .status(400)
+      .json({ error: 'Invalid status', message: `Status must be one of: ${valid.join(', ')}` });
+  }
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const job = await client.query('SELECT id FROM jobs WHERE id = $1', [id]);
+    if (!job.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    const resume = await client.query('SELECT id FROM resumes WHERE id = $1', [resumeId]);
+    if (!resume.rows.length) {
+      await client.query('ROLLBACK');
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    const rel = await client.query(
+      'SELECT 1 FROM job_resumes WHERE job_id = $1 AND resume_id = $2',
+      [id, resumeId]
+    );
+    if (rel.rows.length) {
+      await client.query(
+        'UPDATE job_resumes SET status = $1, updated_at = NOW() WHERE job_id = $2 AND resume_id = $3',
+        [status, id, resumeId]
+      );
+    } else {
+      await client.query(
+        'INSERT INTO job_resumes (job_id, resume_id, status, created_at, updated_at) VALUES ($1,$2,$3,NOW(),NOW())',
+        [id, resumeId, status]
+      );
+    }
+
+    await client.query('COMMIT');
+    res.json({
+      success: true,
+      message: 'Resume status updated',
+      data: { jobId: id, resumeId, status, updated_at: new Date().toISOString() }
+    });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error updating resume status:', err);
+    res.status(500).json({ error: 'Failed to update resume status', details: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Download resume
+app.get('/:id/download', async (req, res) => {
+  const { id } = req.params;
+  const client = await pool.connect();
+
+  try {
+    const { rows } = await client.query(
+      'SELECT file_path, original_filename FROM resumes WHERE id = $1',
+      [id]
+    );
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Resume not found' });
+    }
+
+    const { file_path, original_filename } = rows[0];
+    if (!file_path || !fs.existsSync(file_path)) {
+      return res.status(404).json({ error: 'Resume file not found on disk' });
+    }
+
+    const ext = path.extname(file_path).toLowerCase();
+    let contentType = 'application/octet-stream';
+    if (ext === '.pdf') contentType = 'application/pdf';
+    else if (ext === '.doc') contentType = 'application/msword';
+    else if (ext === '.docx') contentType = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    else if (ext === '.txt') contentType = 'text/plain';
+
+    res.setHeader('Content-Type', contentType);
+    res.setHeader(
+      'Content-Disposition',
+      `attachment; filename="${original_filename || `resume_${id}${ext}`}"`
+    );
+
+    const stream = fs.createReadStream(file_path);
+    stream.on('error', err => {
+      console.error('Error streaming file:', err);
+      if (!res.headersSent) {
+        res.status(500).json({ error: 'Failed to stream file', details: err.message });
+      }
+    });
+    stream.pipe(res);
+  } catch (err) {
+    console.error('Error downloading resume:', err);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Failed to download resume', details: err.message });
+    }
+  } finally {
+    client.release();
+  }
+});
+
+
+// Admin panel listing
+app.get('/adminpanel', async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const view = req.query.view || 'all';
+    const userId = req.user?.id;
+    let sql = `
+      SELECT j.*, a.name AS creator_name, a.profile_image AS creator_admin_image
+      FROM jobs j
+      LEFT JOIN admins a ON j.creator_id = a.id
+    `;
+    const params = [];
+    if (view === 'my' && userId) {
+      sql += ' WHERE j.creator_id = $1';
+      params.push(userId);
+    }
+    sql += ' ORDER BY j.created_at DESC';
+
+    const { rows } = await client.query(sql, params);
+    res.json(rows);
+  } catch (err) {
+    console.error('Error fetching jobs:', err);
+    res.status(500).json({ error: 'Failed to fetch jobs', details: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// Edit job
+app.put('/:id/edit', async (req, res) => {
+  const { id } = req.params;
+  const {
+    title,
+    companyname,
+    description,
+    apply_link,
+    image_link,
+    url,
+    salary,
+    location,
+    job_type,
+    experience,
+    batch,
+    status
+  } = req.body;
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+    const values = [
+      title,
+      companyname,
+      description,
+      apply_link,
+      image_link,
+      url,
+      salary,
+      location,
+      job_type,
+      experience,
+      batch,
+      status,
+      id
+    ];
+    const { rows } = await client.query(
+      `UPDATE jobs
+       SET title = $1,
+           companyname = $2,
+           description = $3,
+           apply_link = $4,
+           image_link = $5,
+           url = $6,
+           salary = $7,
+           location = $8,
+           job_type = $9,
+           experience = $10,
+           batch = $11,
+           status = $12,
+           updated_at = NOW()
+       WHERE id = $13
+       RETURNING *`,
+      values
+    );
+    await client.query('COMMIT');
+
+    if (!rows.length) {
+      return res.status(404).json({ error: 'Job not found' });
+    }
+    res.json({ success: true, message: 'Job updated successfully', data: rows[0] });
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Error updating job:', err);
+    res.status(500).json({ error: 'Failed to update job', details: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+module.exports = app;
