@@ -1925,6 +1925,28 @@ app.get('/api/public/resumes', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch resumes' });
   }
 });
+
+// Add this after your existing resume endpoints
+app.get('/api/public/resumes/:id/download', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM resumes WHERE id = $1 AND job_id IS NOT NULL',
+      [req.params.id]
+    );
+    
+    if (!result.rows.length) return res.status(404).send('Resume not found');
+
+    const resume = result.rows[0];
+    res.set({
+      'Content-Type': resume.file_type,
+      'Content-Disposition': `attachment; filename="${resume.name}_resume.${resume.file_type.split('/')[1]}"`
+    });
+    res.send(resume.resume_file);
+  } catch (error) {
+    console.error('Public resume download error:', error);
+    res.status(500).send('Download failed');
+  }
+});
 // Download Resume Endpoint
 app.get('/api/resumes/:id/download', async (req, res) => {
   try {
