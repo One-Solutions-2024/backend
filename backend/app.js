@@ -2262,20 +2262,11 @@ app.post("/api/jobs/:id/upload-resume", upload.single("resume"), async (req, res
 
     // Store in database
     await pool.query(
-      `INSERT INTO resumes (job_id, name, email, phone, resume_file, file_type, skills, experience, match_percentage)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [
-        jobId,
-        name,
-        email,
-        phone,
-        file.buffer,
-        file.mimetype,
-        analysisResult.skills,
-        analysisResult.experience,
-        analysisResult.matchPercentage,
-      ],
-    )
+    `INSERT INTO resumes (job_id, name, email, phone, resume_file, file_type, skills, experience, match_percentage)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+    [jobId, name, email, phone, file.buffer, file.mimetype, 
+     analysisResult.skills, analysisResult.experience, analysisResult.matchPercentage]
+  );
 
     res.json(analysisResult)
   } catch (error) {
@@ -2356,20 +2347,12 @@ app.post('/api/analyze-resume', upload.single('resume'), async (req, res) => {
     const analysisResult = analyzeResumeForAllJobs(text, jobs);
 
     // Store in database with NULL job_id
-    await pool.query(
-      `INSERT INTO resumes (name, email, phone, resume_file, file_type, skills, experience, match_percentage)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-      [
-        name,
-        email,
-        phone || null,
-        file.buffer,
-        file.mimetype,
-        analysisResult.skills,
-        analysisResult.experience,
-        analysisResult.averageMatch
-      ]
-    );
+   await pool.query(
+    `INSERT INTO resumes (name, email, phone, resume_file, file_type, skills, experience, match_percentage)
+     VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+    [name, email, phone || null, file.buffer, file.mimetype, 
+     analysisResult.skills, analysisResult.experience, analysisResult.averageMatch]
+  );
 
     res.json({
       success: true,
@@ -2682,6 +2665,29 @@ app.put('/:id/resumes/status', async (req, res) => {
     res.status(500).json({ error: 'Failed to update resume status', details: err.message });
   } finally {
     client.release();
+  }
+});
+
+app.get('/api/public/resumes/:id/download', async (req, res) => {
+  try {
+    const result = await pool.query(
+      'SELECT * FROM resumes WHERE id = $1 AND job_id IS NULL',
+      [req.params.id]
+    );
+    
+    if (!result.rows.length) {
+      return res.status(404).send('Public resume not found');
+    }
+
+    const resume = result.rows[0];
+    res.set({
+      'Content-Type': resume.file_type,
+      'Content-Disposition': `attachment; filename="${resume.name}_resume.${resume.file_type.split('/')[1]}"`
+    });
+    res.send(resume.resume_file);
+  } catch (error) {
+    console.error('Public download error:', error);
+    res.status(500).send('Download failed');
   }
 });
 
